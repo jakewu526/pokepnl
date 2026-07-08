@@ -1,0 +1,39 @@
+{
+  "name": "pokemon-tcg-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "prisma migrate dev",
+    "ingest:cards": "tsx scripts/ingest-cards.ts",
+    "ingest:sealed": "tsx scripts/ingest-sealed-products.ts",
+    "link:tcgplayer": "tsx scripts/link-tcgplayer-ids.ts",
+    "backfill:pricecharting": "tsx scripts/backfill-pricecharting-history.ts",
+    "snapshot:prices": "tsx scripts/snapshot-prices.ts",
+    "report:counts": "tsx scripts/report-counts.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.8.0",
+    "next": "16.2.10",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv": "^17.4.2",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "prisma": "^7.8.0",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.0",
+    "typescript": "^5"
+  }
+}

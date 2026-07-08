@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model CardSet {
+  id             String   @id @default(cuid())
+  name           String
+  series         String?
+  releaseDate    DateTime?
+  totalCards     Int?
+  pokemonTcgIoId String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  cards          Card[]
+  sealedProducts SealedProduct[]
+}
+
+model Card {
+  id                 String   @id @default(cuid())
+  setId              String
+  number             String
+  name               String
+  rarity             String?
+  supertype          String?
+  subtypes           String[]
+  imageUrl           String?
+  pokemonTcgIoId     String?  @unique
+  tcgplayerProductId String?  @unique
+  pricechartingId    String?  @unique
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  set            CardSet         @relation(fields: [setId], references: [id])
+  priceSnapshots PriceSnapshot[]
+
+  @@unique([setId, number])
+  @@index([name])
+}
+
+enum SealedProductType {
+  BOOSTER_BOX
+  BOOSTER_PACK
+  ELITE_TRAINER_BOX
+  BUNDLE
+  BLISTER
+  COLLECTION_BOX
+  TIN
+  OTHER
+}
+
+model SealedProduct {
+  id                 String            @id @default(cuid())
+  setId              String?
+  name               String
+  type               SealedProductType
+  tcgplayerProductId String?           @unique
+  pricechartingId    String?           @unique
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  set            CardSet?        @relation(fields: [setId], references: [id])
+  priceSnapshots PriceSnapshot[]
+
+  @@index([name])
+}
+
+enum PriceSource {
+  TCGPLAYER
+  PRICECHARTING
+}
+
+enum PriceType {
+  MARKET
+  LOW
+  MID
+  HIGH
+  DIRECT_LOW
+}
+
+model PriceSnapshot {
+  id              String    @id @default(cuid())
+  cardId          String?
+  sealedProductId String?
+  source          PriceSource
+  priceType       PriceType
+  condition       String?
+  price           Decimal   @db.Decimal(10, 2)
+  capturedAt      DateTime  @default(now())
+  capturedDate    DateTime  @default(now()) @db.Date
+
+  card          Card?          @relation(fields: [cardId], references: [id])
+  sealedProduct SealedProduct? @relation(fields: [sealedProductId], references: [id])
+
+  @@unique([cardId, sealedProductId, source, priceType, condition, capturedDate])
+  @@index([cardId, capturedAt])
+  @@index([sealedProductId, capturedAt])
+}
