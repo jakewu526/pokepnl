@@ -39,7 +39,7 @@ model Card {
   set            CardSet         @relation(fields: [setId], references: [id])
   priceSnapshots PriceSnapshot[]
 
-  @@unique([setId, number])
+  @@index([setId, number])
   @@index([name])
 }
 

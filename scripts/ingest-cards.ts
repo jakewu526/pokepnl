@@ -28,12 +28,22 @@ function apiHeaders(): HeadersInit {
   return apiKey ? { "X-Api-Key": apiKey } : {};
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: apiHeaders() });
-  if (!res.ok) {
-    throw new Error(`Request to ${url} failed: ${res.status} ${res.statusText}`);
+async function fetchJson<T>(url: string, retries = 7): Promise<T> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(url, { headers: apiHeaders() });
+    if (res.ok) return res.json() as Promise<T>;
+
+    // The free/unauthenticated pokemontcg.io tier is heavily rate-limited
+    // and returns spurious 404s/504s under load rather than clean 429s.
+    const retryable = [404, 429, 502, 503, 504].includes(res.status);
+    if (!retryable || attempt === retries) {
+      throw new Error(`Request to ${url} failed: ${res.status} ${res.statusText}`);
+    }
+    const delayMs = 1000 * 2 ** attempt;
+    console.warn(`  ${res.status} on ${url}, retrying in ${delayMs}ms...`);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
-  return res.json() as Promise<T>;
+  throw new Error("unreachable");
 }
 
 async function ingestSets(): Promise<void> {
