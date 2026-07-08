@@ -67,12 +67,15 @@ model SealedProduct {
   set            CardSet?        @relation(fields: [setId], references: [id])
   priceSnapshots PriceSnapshot[]
 
+  @@unique([setId, name])
   @@index([name])
 }
 
 enum PriceSource {
   TCGPLAYER
+  CARDMARKET
   PRICECHARTING
+  EBAY
 }
 
 enum PriceType {

@@ -1,7 +1,15 @@
 import "dotenv/config";
 import { prisma } from "@/lib/prisma";
 import { tcgplayerFetch } from "@/lib/tcgplayer";
+import { capturePriceSnapshot } from "@/lib/price-snapshot";
 
+// DORMANT until TCGPLAYER_PUBLIC_KEY/PRIVATE_KEY are obtained (TCGplayer's
+// API requires manual partner approval). Until then, card pricing is
+// captured for free via `ingest-cards.ts`, which pulls the same TCGplayer
+// data as a mirror through pokemontcg.io. This script exists so we can
+// switch to the direct, higher-fidelity feed (per-condition/printing
+// pricing, sealed product) the moment API access is granted.
+//
 // Recurring job: fetch current TCGplayer prices for every card/sealed
 // product we know about and insert one PriceSnapshot row per item for
 // today. Safe to re-run the same day thanks to the (entity, source,
@@ -51,30 +59,14 @@ async function snapshotEntities(
     const entityId = entityIdByProductId.get(price.productId);
     if (!entityId || price.marketPrice == null) continue;
 
-    await prisma.priceSnapshot.upsert({
-      where: {
-        cardId_sealedProductId_source_priceType_condition_capturedDate: {
-          cardId: entityField === "cardId" ? entityId : null,
-          sealedProductId: entityField === "sealedProductId" ? entityId : null,
-          source: "TCGPLAYER",
-          priceType: "MARKET",
-          condition: price.subTypeName,
-          capturedDate: capturedAt,
-        },
-      },
-      create: {
-        [entityField]: entityId,
-        source: "TCGPLAYER",
-        priceType: "MARKET",
-        condition: price.subTypeName,
-        price: price.marketPrice,
-        capturedAt,
-        capturedDate: capturedAt,
-      } as never,
-      update: {
-        price: price.marketPrice,
-        capturedAt,
-      },
+    await capturePriceSnapshot({
+      entityId,
+      entityField,
+      source: "TCGPLAYER",
+      priceType: "MARKET",
+      condition: price.subTypeName,
+      price: price.marketPrice,
+      capturedAt,
     });
     count += 1;
   }

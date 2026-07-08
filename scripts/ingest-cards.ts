@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { prisma } from "@/lib/prisma";
+import { capturePriceSnapshot } from "@/lib/price-snapshot";
 
 const API_BASE = "https://api.pokemontcg.io/v2";
 const PAGE_SIZE = 250;
@@ -12,6 +13,25 @@ type PokemonTcgSet = {
   total: number;
 };
 
+// pokemontcg.io mirrors TCGplayer and Cardmarket pricing on every card for
+// free (no API key from either marketplace required) -- see
+// https://docs.pokemontcg.io/api-reference/cards/card-object
+type TcgplayerPriceEntry = {
+  low?: number;
+  mid?: number;
+  high?: number;
+  market?: number;
+  directLow?: number;
+};
+
+type CardmarketPrices = {
+  trendPrice?: number;
+  lowPrice?: number;
+  averageSellPrice?: number;
+  reverseHoloTrend?: number;
+  reverseHoloLow?: number;
+};
+
 type PokemonTcgCard = {
   id: string;
   name: string;
@@ -21,7 +41,58 @@ type PokemonTcgCard = {
   rarity?: string;
   images?: { large?: string; small?: string };
   set: { id: string };
+  tcgplayer?: { prices?: Record<string, TcgplayerPriceEntry> };
+  cardmarket?: { prices?: CardmarketPrices };
 };
+
+async function captureCardPrices(cardId: string, card: PokemonTcgCard): Promise<void> {
+  const capturedAt = new Date();
+
+  for (const [variant, entry] of Object.entries(card.tcgplayer?.prices ?? {})) {
+    const fields: [keyof TcgplayerPriceEntry, "MARKET" | "LOW" | "MID" | "HIGH" | "DIRECT_LOW"][] = [
+      ["market", "MARKET"],
+      ["low", "LOW"],
+      ["mid", "MID"],
+      ["high", "HIGH"],
+      ["directLow", "DIRECT_LOW"],
+    ];
+    for (const [field, priceType] of fields) {
+      const price = entry[field];
+      if (price == null) continue;
+      await capturePriceSnapshot({
+        entityId: cardId,
+        entityField: "cardId",
+        source: "TCGPLAYER",
+        priceType,
+        condition: variant,
+        price,
+        capturedAt,
+      });
+    }
+  }
+
+  const cardmarket = card.cardmarket?.prices;
+  if (cardmarket) {
+    const entries: [number | undefined, "MARKET" | "LOW", string][] = [
+      [cardmarket.trendPrice, "MARKET", "normal"],
+      [cardmarket.lowPrice, "LOW", "normal"],
+      [cardmarket.reverseHoloTrend, "MARKET", "reverseHolo"],
+      [cardmarket.reverseHoloLow, "LOW", "reverseHolo"],
+    ];
+    for (const [price, priceType, condition] of entries) {
+      if (price == null) continue;
+      await capturePriceSnapshot({
+        entityId: cardId,
+        entityField: "cardId",
+        source: "CARDMARKET",
+        priceType,
+        condition,
+        price,
+        capturedAt,
+      });
+    }
+  }
+}
 
 function apiHeaders(): HeadersInit {
   const apiKey = process.env.POKEMONTCG_API_KEY;
@@ -92,7 +163,7 @@ async function ingestCards(): Promise<void> {
         continue;
       }
 
-      await prisma.card.upsert({
+      const dbCard = await prisma.card.upsert({
         where: { pokemonTcgIoId: card.id },
         create: {
           pokemonTcgIoId: card.id,
@@ -112,6 +183,8 @@ async function ingestCards(): Promise<void> {
           imageUrl: card.images?.large ?? card.images?.small,
         },
       });
+
+      await captureCardPrices(dbCard.id, card);
     }
 
     totalIngested += cards.length;

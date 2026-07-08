@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { prisma } from "@/lib/prisma";
+import { capturePriceSnapshot } from "@/lib/price-snapshot";
 
 // One-time backfill of historical prices from PriceCharting for cards/sealed
 // products that have a pricechartingId. PriceCharting's public API primarily
@@ -46,27 +47,14 @@ async function backfillEntity(
 
   for (const point of history) {
     const capturedDate = new Date(point.date);
-    await prisma.priceSnapshot.upsert({
-      where: {
-        cardId_sealedProductId_source_priceType_condition_capturedDate: {
-          cardId: entityField === "cardId" ? entityId : null,
-          sealedProductId: entityField === "sealedProductId" ? entityId : null,
-          source: "PRICECHARTING",
-          priceType: "MARKET",
-          condition: null,
-          capturedDate,
-        },
-      },
-      create: {
-        [entityField]: entityId,
-        source: "PRICECHARTING",
-        priceType: "MARKET",
-        condition: null,
-        price: point.price,
-        capturedAt: capturedDate,
-        capturedDate,
-      } as never,
-      update: { price: point.price },
+    await capturePriceSnapshot({
+      entityId,
+      entityField,
+      source: "PRICECHARTING",
+      priceType: "MARKET",
+      condition: null,
+      price: point.price,
+      capturedAt: capturedDate,
     });
     count += 1;
   }
