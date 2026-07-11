@@ -51,3 +51,54 @@ export async function tcgplayerFetch<T>(path: string): Promise<T> {
   }
   return res.json() as Promise<T>;
 }
+
+// Condition-level pricing lives one layer below the aggregate
+// /pricing/product/{ids} endpoint used by scripts/snapshot-prices.ts: every
+// product has SKUs (productId x printing x condition x language), each with
+// its own market price. UNVERIFIED against the live API (no TCGplayer keys
+// yet) -- confirm the /catalog/conditions and /catalog/products/{id}/skus
+// response shapes once TCGPLAYER_PUBLIC_KEY/PRIVATE_KEY are obtained.
+
+export type TcgSku = {
+  skuId: number;
+  productId: number;
+  printingId: number;
+  conditionId: number;
+  languageId: number;
+};
+
+export type TcgSkuPrice = {
+  skuId: number;
+  lowPrice: number | null;
+  marketPrice: number | null;
+};
+
+export type TcgCondition = {
+  conditionId: number;
+  name: string;
+  abbreviation: string;
+};
+
+let cachedConditions: TcgCondition[] | null = null;
+
+export async function getConditions(): Promise<TcgCondition[]> {
+  if (cachedConditions) return cachedConditions;
+  const res = await tcgplayerFetch<{ results: TcgCondition[] }>("/catalog/conditions");
+  cachedConditions = res.results;
+  return cachedConditions;
+}
+
+export async function getProductSkus(productId: number): Promise<TcgSku[]> {
+  const res = await tcgplayerFetch<{ results: TcgSku[] }>(
+    `/catalog/products/${productId}/skus`
+  );
+  return res.results;
+}
+
+export async function getSkuPrices(skuIds: number[]): Promise<TcgSkuPrice[]> {
+  if (skuIds.length === 0) return [];
+  const res = await tcgplayerFetch<{ results: TcgSkuPrice[] }>(
+    `/pricing/sku/${skuIds.join(",")}`
+  );
+  return res.results;
+}

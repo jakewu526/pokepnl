@@ -57,14 +57,25 @@ export type EbayItemSummary = {
 
 export async function searchActiveListings(
   query: string,
-  limit = 50
+  limit = 50,
+  aspectFilter?: { name: string; value: string }
 ): Promise<EbayItemSummary[]> {
   const token = await getAccessToken();
+  const categoryId = "183454"; // eBay's "CCG Individual Cards" parent category; Pokemon sealed product mostly lives under 183456 (CCG Sealed Product)
   const params = new URLSearchParams({
     q: query,
-    category_ids: "183454", // eBay's "CCG Individual Cards" parent category; Pokemon sealed product mostly lives under 183456 (CCG Sealed Product)
+    category_ids: categoryId,
     limit: String(limit),
   });
+  // UNVERIFIED against the live Taxonomy API -- the exact aspect name/value
+  // strings for "Card Condition" on this category are a best-effort guess;
+  // confirm once EBAY_CLIENT_ID/SECRET are populated. See lib/condition.ts.
+  if (aspectFilter) {
+    params.set(
+      "aspect_filter",
+      `categoryId:${categoryId},${aspectFilter.name}:{${aspectFilter.value}}`
+    );
+  }
 
   const res = await fetch(`${BROWSE_API_BASE}/item_summary/search?${params}`, {
     headers: {

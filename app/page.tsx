@@ -1,21 +1,24 @@
 import { Suspense } from "react";
 import { CARDS_PAGE_SIZE, getCatalogStats, searchCards } from "@/lib/cards";
+import { isCondition } from "@/lib/condition";
 import { SearchBar } from "@/components/SearchBar";
 import { CardTile } from "@/components/CardTile";
+import { ConditionFilter } from "@/components/ConditionFilter";
 import { Pagination } from "@/components/Pagination";
 
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; condition?: string }>;
 }) {
   const params = await searchParams;
   const query = params.q ?? "";
   const page = Math.max(1, Number(params.page) || 1);
+  const condition = isCondition(params.condition) ? params.condition : "NM";
 
   const [{ cardCount, setCount }, results] = await Promise.all([
     getCatalogStats(),
-    searchCards(query, page),
+    searchCards(query, page, condition),
   ]);
 
   return (
@@ -39,6 +42,9 @@ export default async function Home({
           <Suspense fallback={<div className="h-12 rounded-full border border-line bg-paper-raised" />}>
             <SearchBar initialQuery={query} />
           </Suspense>
+          <Suspense fallback={<div className="h-10 w-48 rounded-full border border-line bg-paper-raised" />}>
+            <ConditionFilter condition={condition} />
+          </Suspense>
         </div>
       </header>
 
@@ -60,11 +66,16 @@ export default async function Home({
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
               {results.cards.map((card) => (
-                <CardTile key={card.id} card={card} />
+                <CardTile key={card.id} card={card} condition={condition} />
               ))}
             </div>
             <div className="mt-8">
-              <Pagination query={query} page={results.page} pageCount={results.pageCount} />
+              <Pagination
+                query={query}
+                page={results.page}
+                pageCount={results.pageCount}
+                condition={condition}
+              />
             </div>
           </>
         )}

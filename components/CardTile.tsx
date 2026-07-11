@@ -1,5 +1,7 @@
 import Image from "next/image";
+import Link from "next/link";
 import type { CardListItem } from "@/lib/cards";
+import type { Condition } from "@/lib/condition";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -12,9 +14,21 @@ function formatNumber(number: string, setTotal: number | null): string {
   return `${padded}/${setTotal}`;
 }
 
-export function CardTile({ card }: { card: CardListItem }) {
+export function CardTile({
+  card,
+  condition = "NM",
+}: {
+  card: CardListItem;
+  condition?: Condition;
+}) {
+  const href =
+    condition !== "NM" ? `/cards/${card.id}?condition=${condition}` : `/cards/${card.id}`;
+
   return (
-    <article className="group flex flex-col overflow-hidden rounded-card border border-line bg-paper-raised transition-shadow hover:shadow-[0_2px_0_var(--line)]">
+    <Link
+      href={href}
+      className="group flex flex-col overflow-hidden rounded-card border border-line bg-paper-raised transition-shadow hover:shadow-[0_2px_0_var(--line)]"
+    >
       <div className="relative aspect-[5/7] bg-line/40">
         {card.imageUrl ? (
           <Image
@@ -48,12 +62,17 @@ export function CardTile({ card }: { card: CardListItem }) {
           {card.price != null ? (
             <p className="font-data text-lg font-medium text-emerald-strong">
               {priceFormatter.format(card.price)}
+              {card.priceEstimated && (
+                <span className="ml-1 font-body text-xs font-normal text-ink-muted">
+                  (est.)
+                </span>
+              )}
             </p>
           ) : (
             <p className="font-data text-sm text-ink-muted">No price yet</p>
           )}
         </div>
       </div>
-    </article>
+    </Link>
   );
 }
