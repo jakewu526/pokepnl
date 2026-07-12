@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: pokemon
-      POSTGRES_PASSWORD: pokemon
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: pokemon_tcg
     ports:
       - "5432:5432"
