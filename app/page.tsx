@@ -1,10 +1,12 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { CARDS_PAGE_SIZE, getCatalogStats, searchCards } from "@/lib/cards";
 import { isCondition } from "@/lib/condition";
 import { SearchBar } from "@/components/SearchBar";
 import { CardTile } from "@/components/CardTile";
 import { ConditionFilter } from "@/components/ConditionFilter";
 import { Pagination } from "@/components/Pagination";
+import { AuthNav } from "@/components/AuthNav";
 
 export default async function Home({
   searchParams,
@@ -35,10 +37,28 @@ export default async function Home({
                 Binder
               </h1>
             </div>
-            <p className="hidden font-data text-xs text-ink-muted sm:block">
-              {cardCount.toLocaleString()} cards · {setCount.toLocaleString()} sets
-            </p>
+            <div className="flex items-center gap-4">
+              <p className="hidden font-data text-xs text-ink-muted sm:block">
+                {cardCount.toLocaleString()} cards · {setCount.toLocaleString()} sets
+              </p>
+              <Suspense fallback={null}>
+                <AuthNav />
+              </Suspense>
+            </div>
           </div>
+
+          <nav className="flex gap-1 font-body text-sm font-medium" aria-label="Catalog section">
+            <span className="rounded-full bg-emerald px-3 py-1.5 text-paper-raised">
+              Cards
+            </span>
+            <Link
+              href="/sealed"
+              className="rounded-full px-3 py-1.5 text-ink-muted hover:text-ink"
+            >
+              Sealed
+            </Link>
+          </nav>
+
           <Suspense fallback={<div className="h-12 rounded-full border border-line bg-paper-raised" />}>
             <SearchBar initialQuery={query} />
           </Suspense>

@@ -38,9 +38,62 @@ model Card {
 
   set            CardSet         @relation(fields: [setId], references: [id])
   priceSnapshots PriceSnapshot[]
+  collectionItems CollectionItem[]
+  transactions    Transaction[]
 
   @@index([setId, number])
   @@index([name])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  collectionItems CollectionItem[]
+  transactions    Transaction[]
+}
+
+model CollectionItem {
+  id              String   @id @default(cuid())
+  userId          String
+  cardId          String?
+  sealedProductId String?
+  condition       String?
+  quantity        Int      @default(1)
+  costPerUnit     Decimal? @db.Decimal(10, 2)
+  createdAt       DateTime @default(now())
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card          Card?          @relation(fields: [cardId], references: [id])
+  sealedProduct SealedProduct? @relation(fields: [sealedProductId], references: [id])
+
+  @@unique([userId, cardId, condition])
+  @@unique([userId, sealedProductId])
+  @@index([userId])
+}
+
+model Transaction {
+  id               String   @id @default(cuid())
+  userId           String
+  cardId           String?
+  sealedProductId  String?
+  itemName         String
+  condition        String?
+  quantity         Int
+  costPerUnit      Decimal? @db.Decimal(10, 2)
+  salePricePerUnit Decimal  @db.Decimal(10, 2)
+  profit           Decimal? @db.Decimal(10, 2)
+  soldAt           DateTime @default(now())
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card          Card?          @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  sealedProduct SealedProduct? @relation(fields: [sealedProductId], references: [id], onDelete: SetNull)
+
+  @@index([userId, soldAt])
 }
 
 enum SealedProductType {
@@ -59,13 +112,16 @@ model SealedProduct {
   setId              String?
   name               String
   type               SealedProductType
+  imageUrl           String?
   tcgplayerProductId String?           @unique
   pricechartingId    String?           @unique
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
-  set            CardSet?        @relation(fields: [setId], references: [id])
-  priceSnapshots PriceSnapshot[]
+  set             CardSet?         @relation(fields: [setId], references: [id])
+  priceSnapshots  PriceSnapshot[]
+  collectionItems CollectionItem[]
+  transactions    Transaction[]
 
   @@unique([setId, name])
   @@index([name])

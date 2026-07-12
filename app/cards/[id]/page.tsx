@@ -3,8 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCardDetail } from "@/lib/cards";
 import { isCondition } from "@/lib/condition";
+import { Suspense } from "react";
 import { PriceChart } from "@/components/PriceChart";
 import { ConditionFilter } from "@/components/ConditionFilter";
+import { AuthNav } from "@/components/AuthNav";
+import { AddToCollectionButton } from "@/components/AddToCollectionButton";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -49,7 +52,12 @@ export default async function CardDetailPage({
           >
             ← Binder
           </Link>
-          <ConditionFilter condition={condition} />
+          <div className="flex items-center gap-4">
+            <ConditionFilter condition={condition} />
+            <Suspense fallback={null}>
+              <AuthNav />
+            </Suspense>
+          </div>
         </div>
       </header>
 
@@ -107,6 +115,12 @@ export default async function CardDetailPage({
                 ) : (
                   <p className="font-data text-lg text-ink-muted">No price yet</p>
                 )}
+              </div>
+
+              <div className="mt-4">
+                <Suspense fallback={null}>
+                  <AddToCollectionButton cardId={card.id} condition={condition} marketPrice={card.price} />
+                </Suspense>
               </div>
             </div>
 

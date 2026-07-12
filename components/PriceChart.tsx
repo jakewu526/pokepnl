@@ -19,6 +19,14 @@ const axisDateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
 });
 
+// `new Date("2026-07-12")` parses as UTC midnight, which formats as the
+// previous calendar day in any timezone behind UTC. Points carry
+// date-only strings, so parse them as local calendar dates instead.
+function parseLocalDate(dateStr: string): Date {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 const WIDTH = 720;
 const HEIGHT = 280;
 const PAD_LEFT = 56;
@@ -29,22 +37,30 @@ const PAD_BOTTOM = 32;
 export function PriceChart({
   points,
   source,
+  negative = false,
 }: {
   points: PricePoint[];
   source: string | null;
+  negative?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const lineColor = negative ? "var(--amber)" : "var(--emerald)";
+  const priceTextClass = negative ? "text-amber" : "text-emerald-strong";
 
   const layout = useMemo(() => {
     if (points.length === 0) return null;
 
-    const dates = points.map((p) => new Date(p.date).getTime());
+    const dates = points.map((p) => parseLocalDate(p.date).getTime());
     const prices = points.map((p) => p.price);
     const minDate = Math.min(...dates);
     const maxDate = Math.max(...dates);
-    const minPrice = 0;
-    const maxPriceRaw = Math.max(...prices);
+    // Prices are conventionally shown from a $0 baseline, but a profit
+    // series can go negative -- extend the floor to fit the lowest value
+    // when it does, rather than clipping/inverting negative points.
+    const minPriceRaw = Math.min(0, ...prices);
+    const minPrice = minPriceRaw < 0 ? minPriceRaw * 1.1 : 0;
+    const maxPriceRaw = Math.max(0, ...prices);
     const maxPrice = maxPriceRaw === 0 ? 1 : maxPriceRaw * 1.1;
 
     const xScale = (t: number) =>
@@ -65,7 +81,7 @@ export function PriceChart({
 
     const priceTicks = 4;
     const yTicks = Array.from({ length: priceTicks + 1 }, (_, i) => {
-      const value = (maxPrice / priceTicks) * i;
+      const value = minPrice + ((maxPrice - minPrice) / priceTicks) * i;
       return { value, y: yScale(value) };
     });
 
@@ -96,11 +112,11 @@ export function PriceChart({
     const single = points[0];
     return (
       <div className="flex h-[280px] flex-col items-center justify-center gap-2 rounded-card border border-line bg-paper-raised text-center">
-        <p className="font-data text-2xl font-medium text-emerald-strong">
+        <p className={`font-data text-2xl font-medium ${priceTextClass}`}>
           {priceFormatter.format(single.price)}
         </p>
         <p className="font-body text-xs text-ink-muted">
-          {dateFormatter.format(new Date(single.date))}
+          {dateFormatter.format(parseLocalDate(single.date))}
         </p>
         <p className="font-body text-xs text-ink-muted">
           History builds daily — check back over time.
@@ -180,7 +196,7 @@ export function PriceChart({
             </text>
           ))}
 
-          <path d={pathD} fill="none" stroke="var(--emerald)" strokeWidth={2} />
+          <path d={pathD} fill="none" stroke={lineColor} strokeWidth={2} />
 
           {hovered && (
             <>
@@ -189,12 +205,12 @@ export function PriceChart({
                 x2={hovered.x}
                 y1={PAD_TOP}
                 y2={HEIGHT - PAD_BOTTOM}
-                stroke="var(--emerald)"
+                stroke={lineColor}
                 strokeWidth={1}
                 strokeDasharray="4 3"
                 opacity={0.6}
               />
-              <circle cx={hovered.x} cy={hovered.y} r={4} fill="var(--emerald)" />
+              <circle cx={hovered.x} cy={hovered.y} r={4} fill={lineColor} />
             </>
           )}
         </svg>
@@ -207,11 +223,11 @@ export function PriceChart({
               top: `${(hovered.y / HEIGHT) * 100 - 2}%`,
             }}
           >
-            <p className="font-data text-sm font-medium text-emerald-strong">
+            <p className={`font-data text-sm font-medium ${priceTextClass}`}>
               {priceFormatter.format(hovered.point.price)}
             </p>
             <p className="font-body text-[11px] text-ink-muted">
-              {dateFormatter.format(new Date(hovered.point.date))}
+              {dateFormatter.format(parseLocalDate(hovered.point.date))}
             </p>
           </div>
         )}

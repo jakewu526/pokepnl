@@ -12,6 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "ingest:cards": "tsx scripts/ingest-cards.ts",
     "ingest:sealed:ebay": "tsx scripts/ingest-sealed-products-ebay.ts",
+    "ingest:sealed:pricecharting": "tsx scripts/ingest-sealed-products-pricecharting.ts",
     "ingest:sealed": "tsx scripts/ingest-sealed-products.ts",
     "link:tcgplayer": "tsx scripts/link-tcgplayer-ids.ts",
     "backfill:pricecharting": "tsx scripts/backfill-pricecharting-history.ts",
@@ -21,12 +22,17 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "bcryptjs": "^3.0.3",
+    "cheerio": "^1.2.0",
+    "jose": "^6.2.3",
     "next": "16.2.10",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

@@ -211,7 +211,7 @@ export async function getCardDetail(
 
 type LatestPriceRow = { cardId: string; source: "TCGPLAYER" | "CARDMARKET"; price: string };
 
-async function getLatestPrices(
+export async function getLatestPrices(
   cardIds: string[]
 ): Promise<Map<string, { price: number; source: "TCGPLAYER" | "CARDMARKET" }>> {
   if (cardIds.length === 0) return new Map();
