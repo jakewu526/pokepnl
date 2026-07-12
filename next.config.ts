@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
       // A minority of cards (~2.7%) have pokemontcg.io redirecting their
       // image field to this host instead.
       new URL("https://images.scrydex.com/**"),
+      // PriceCharting's image CDN, used for sealed-product photos.
+      new URL("https://storage.googleapis.com/images.pricecharting.com/**"),
     ],
   },
 };
