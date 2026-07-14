@@ -1,10 +1,12 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { SEALED_PAGE_SIZE, getSealedCatalogStats, searchSealedProducts } from "@/lib/sealed";
+import { getWatchlistedSealedIds } from "@/lib/watchlist";
+import { getCurrentUser } from "@/lib/dal";
 import { SearchBar } from "@/components/SearchBar";
 import { SealedProductTile } from "@/components/SealedProductTile";
 import { SealedPagination } from "@/components/SealedPagination";
 import { AuthNav } from "@/components/AuthNav";
+import { CatalogNav } from "@/components/CatalogNav";
 
 export default async function SealedPage({
   searchParams,
@@ -15,10 +17,15 @@ export default async function SealedPage({
   const query = params.q ?? "";
   const page = Math.max(1, Number(params.page) || 1);
 
-  const [{ productCount }, results] = await Promise.all([
+  const [{ productCount }, results, user] = await Promise.all([
     getSealedCatalogStats(),
     searchSealedProducts(query, page),
+    getCurrentUser(),
   ]);
+  const watchedIds = await getWatchlistedSealedIds(
+    user?.id ?? null,
+    results.products.map((p) => p.id)
+  );
 
   return (
     <div className="flex min-h-full flex-col">
@@ -44,17 +51,7 @@ export default async function SealedPage({
             </div>
           </div>
 
-          <nav className="flex gap-1 font-body text-sm font-medium" aria-label="Catalog section">
-            <Link
-              href="/"
-              className="rounded-full px-3 py-1.5 text-ink-muted hover:text-ink"
-            >
-              Cards
-            </Link>
-            <span className="rounded-full bg-emerald px-3 py-1.5 text-paper-raised">
-              Sealed
-            </span>
-          </nav>
+          <CatalogNav active="sealed" />
 
           <Suspense fallback={<div className="h-12 rounded-full border border-line bg-paper-raised" />}>
             <SearchBar initialQuery={query} />
@@ -80,7 +77,11 @@ export default async function SealedPage({
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
               {results.products.map((product) => (
-                <SealedProductTile key={product.id} product={product} />
+                <SealedProductTile
+                  key={product.id}
+                  product={product}
+                  watched={user ? watchedIds.has(product.id) : undefined}
+                />
               ))}
             </div>
             <div className="mt-8">

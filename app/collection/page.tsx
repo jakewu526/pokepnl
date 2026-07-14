@@ -313,6 +313,7 @@ export default async function CollectionPage() {
                     </h2>
                     <p className="font-body text-[13px] text-ink-muted">
                       {item.sealedProduct.set?.name ?? SEALED_TYPE_LABELS[item.sealedProduct.type as SealedProductType]}
+                      {item.condition && <> · {item.condition}</>}
                     </p>
                     <p className="font-data text-[13px] text-ink-muted">Qty {item.quantity}</p>
                     <p className="font-data text-[13px] text-ink-muted">

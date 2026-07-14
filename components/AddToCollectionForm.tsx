@@ -2,20 +2,19 @@
 
 import { useState, useTransition } from "react";
 import { addToCollection } from "@/app/actions/collection";
-import type { Condition } from "@/lib/condition";
+import { CONDITIONS, CONDITION_LABELS, type Condition } from "@/lib/condition";
 
 export function AddToCollectionForm({
   cardId,
-  condition,
   marketPrice,
 }: {
   cardId: string;
-  condition: Condition;
   marketPrice: number | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [cost, setCost] = useState("");
+  const [condition, setCondition] = useState<Condition>("NM");
 
   function handleAdd() {
     const parsed = parseFloat(cost);
@@ -24,6 +23,7 @@ export function AddToCollectionForm({
       await addToCollection(cardId, condition, costPerUnit);
       setOpen(false);
       setCost("");
+      setCondition("NM");
     });
   }
 
@@ -72,6 +72,22 @@ export function AddToCollectionForm({
           </button>
         )}
       </div>
+
+      <label htmlFor="card-condition-select" className="font-body text-xs font-medium text-ink-muted">
+        Condition
+      </label>
+      <select
+        id="card-condition-select"
+        value={condition}
+        onChange={(e) => setCondition(e.target.value as Condition)}
+        className="h-10 rounded-full border border-line bg-paper px-3 font-body text-sm text-ink outline-none focus:border-emerald"
+      >
+        {CONDITIONS.map((code) => (
+          <option key={code} value={code}>
+            {CONDITION_LABELS[code]}
+          </option>
+        ))}
+      </select>
 
       <div className="flex items-center gap-3">
         <button

@@ -54,13 +54,16 @@ export async function addToCollection(
 
 export async function addSealedToCollection(
   sealedProductId: string,
+  condition: string = "Mint",
   costPerUnit?: number
 ): Promise<void> {
   const session = await verifySession();
 
   await prisma.$transaction(async (tx) => {
     const existing = await tx.collectionItem.findUnique({
-      where: { userId_sealedProductId: { userId: session.userId, sealedProductId } },
+      where: {
+        userId_sealedProductId_condition: { userId: session.userId, sealedProductId, condition },
+      },
     });
 
     if (existing) {
@@ -76,7 +79,7 @@ export async function addSealedToCollection(
       });
     } else {
       await tx.collectionItem.create({
-        data: { userId: session.userId, sealedProductId, costPerUnit },
+        data: { userId: session.userId, sealedProductId, condition, costPerUnit },
       });
     }
   });

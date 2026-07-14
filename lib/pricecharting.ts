@@ -25,10 +25,39 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchHtml(url: string, retriesLeft = 3): Promise<string> {
+/**
+ * Runs `fn` over `items` with at most `concurrency` in flight at once, each
+ * worker pacing itself with `delayMs` between requests -- e.g. concurrency 5
+ * with a 1000ms per-worker delay is ~5x the throughput of a single serial
+ * loop while still capping the request rate (vs. firing all requests at
+ * once), which matters for the ~20k-card backfill in
+ * scripts/backfill-pricecharting-details.ts.
+ */
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  delayMs: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+
+  async function worker() {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index], index);
+      if (next < items.length) await sleep(delayMs);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return results;
+}
+
+async function fetchHtml(url: string, retriesLeft = 5): Promise<string> {
   const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
   if (res.status === 429 && retriesLeft > 0) {
-    const backoffMs = (4 - retriesLeft) * 5000;
+    const backoffMs = (6 - retriesLeft) * 8000;
     await sleep(backoffMs);
     return fetchHtml(url, retriesLeft - 1);
   }
@@ -122,4 +151,80 @@ export async function getConsoleCatalog(slug: string): Promise<PriceChartingResu
 
 function normalize(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+// Historic per-grade price series as PriceCharting's own product-page JS
+// embeds them: `[timestampMs, priceCents][]`. Confirmed against the
+// product page's own "Ungraded / Grade 7 / Grade 8 / Grade 9 / Grade 9.5 /
+// PSA 10" price table and its auction-history dropdown (which pairs each
+// chart_data key with a grade label directly, e.g.
+// `<option value="completed-auctions-cib">Grade 7 (7)</option>`) -- "used"
+// is also the series that lines up with the download-custom API's
+// `loose-price` field (verified: last point in "used" always equals that
+// day's loose-price in cents), so it doubles as the un-graded/raw price.
+// PriceCharting tracks a few more current-only grade columns (BGS 10,
+// CGC 10, SGC 10) that aren't in chart_data at all -- no history available
+// for those via this page, so they're left out here.
+export type GradeKey = "used" | "cib" | "new" | "graded" | "boxonly" | "manualonly";
+export const GRADE_LABELS: Record<GradeKey, string> = {
+  used: "Ungraded",
+  cib: "Grade 7",
+  new: "Grade 8",
+  graded: "Grade 9",
+  boxonly: "Grade 9.5",
+  manualonly: "PSA 10",
+};
+export const GRADE_ORDER: GradeKey[] = ["used", "cib", "new", "graded", "boxonly", "manualonly"];
+
+export type ProductDetail = {
+  imageUrl: string | null;
+  gradeHistories: Partial<Record<GradeKey, [number, number][]>>;
+};
+
+async function findGamePageUrl(pricechartingId: string): Promise<string | null> {
+  // The bulk price-guide download gives only a numeric id, no slug -- the
+  // per-product "offers" page can be fetched by id alone and links back to
+  // the canonical /game/<console-slug>/<product-slug> page (labeled "See
+  // Historic Prices"), which is where the image + price-history chart live.
+  const html = await fetchHtml(`${BASE_URL}/offers?product=${encodeURIComponent(pricechartingId)}`);
+  const match = html.match(/href="(\/game\/[^"]+)">See Historic Prices/);
+  // The href is raw HTML source, where set names containing "&" (Black &
+  // White, HeartGold & SoulSilver, Sword & Shield, ...) are entity-encoded
+  // as "&amp;" -- used as-is, that literal string 404s.
+  return match ? match[1].replace(/&amp;/g, "&") : null;
+}
+
+export async function getProductDetail(pricechartingId: string): Promise<ProductDetail | null> {
+  const gamePagePath = await findGamePageUrl(pricechartingId);
+  if (!gamePagePath) return null;
+
+  // Matches the encoding approach in getConsoleCatalog above -- percent-
+  // encode each path segment rather than trust the raw (already
+  // entity-decoded) slug, which can still contain other URL-unsafe
+  // characters beyond "&".
+  const encodedPath = gamePagePath
+    .split("/")
+    .map((segment) => (segment ? encodeURIComponent(segment) : segment))
+    .join("/");
+  const html = await fetchHtml(`${BASE_URL}${encodedPath}`);
+
+  const imageMatch = html.match(
+    /https:\/\/storage\.googleapis\.com\/images\.pricecharting\.com\/[a-z0-9]+\/1600\.jpg/
+  );
+
+  const chartMatch = html.match(/VGPC\.chart_data\s*=\s*(\{.*?\});/);
+  let gradeHistories: ProductDetail["gradeHistories"] = {};
+  if (chartMatch) {
+    try {
+      const series = JSON.parse(chartMatch[1]) as Record<string, [number, number][]>;
+      for (const key of GRADE_ORDER) {
+        if (series[key]?.length) gradeHistories[key] = series[key];
+      }
+    } catch {
+      // Malformed/absent chart data shouldn't abort the whole backfill run --
+      // the image (if found) is still worth keeping.
+    }
+  }
+
+  return { imageUrl: imageMatch ? imageMatch[0] : null, gradeHistories };
 }

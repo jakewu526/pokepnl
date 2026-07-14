@@ -1,27 +1,31 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { CARDS_PAGE_SIZE, getCatalogStats, searchCards } from "@/lib/cards";
-import { isCondition } from "@/lib/condition";
+import { getWatchlistedCardIds } from "@/lib/watchlist";
+import { getCurrentUser } from "@/lib/dal";
 import { SearchBar } from "@/components/SearchBar";
 import { CardTile } from "@/components/CardTile";
-import { ConditionFilter } from "@/components/ConditionFilter";
 import { Pagination } from "@/components/Pagination";
 import { AuthNav } from "@/components/AuthNav";
+import { CatalogNav } from "@/components/CatalogNav";
 
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string; condition?: string }>;
+  searchParams: Promise<{ q?: string; page?: string }>;
 }) {
   const params = await searchParams;
   const query = params.q ?? "";
   const page = Math.max(1, Number(params.page) || 1);
-  const condition = isCondition(params.condition) ? params.condition : "NM";
 
-  const [{ cardCount, setCount }, results] = await Promise.all([
+  const [{ cardCount, setCount }, results, user] = await Promise.all([
     getCatalogStats(),
-    searchCards(query, page, condition),
+    searchCards(query, page),
+    getCurrentUser(),
   ]);
+  const watchedIds = await getWatchlistedCardIds(
+    user?.id ?? null,
+    results.cards.map((c) => c.id)
+  );
 
   return (
     <div className="flex min-h-full flex-col">
@@ -47,23 +51,10 @@ export default async function Home({
             </div>
           </div>
 
-          <nav className="flex gap-1 font-body text-sm font-medium" aria-label="Catalog section">
-            <span className="rounded-full bg-emerald px-3 py-1.5 text-paper-raised">
-              Cards
-            </span>
-            <Link
-              href="/sealed"
-              className="rounded-full px-3 py-1.5 text-ink-muted hover:text-ink"
-            >
-              Sealed
-            </Link>
-          </nav>
+          <CatalogNav active="cards" />
 
           <Suspense fallback={<div className="h-12 rounded-full border border-line bg-paper-raised" />}>
             <SearchBar initialQuery={query} />
-          </Suspense>
-          <Suspense fallback={<div className="h-10 w-48 rounded-full border border-line bg-paper-raised" />}>
-            <ConditionFilter condition={condition} />
           </Suspense>
         </div>
       </header>
@@ -86,23 +77,22 @@ export default async function Home({
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
               {results.cards.map((card) => (
-                <CardTile key={card.id} card={card} condition={condition} />
+                <CardTile
+                  key={card.id}
+                  card={card}
+                  watched={user ? watchedIds.has(card.id) : undefined}
+                />
               ))}
             </div>
             <div className="mt-8">
-              <Pagination
-                query={query}
-                page={results.page}
-                pageCount={results.pageCount}
-                condition={condition}
-              />
+              <Pagination query={query} page={results.page} pageCount={results.pageCount} />
             </div>
           </>
         )}
       </main>
 
       <footer className="border-t border-line px-4 py-4 text-center font-data text-xs text-ink-muted sm:px-6">
-        Prices from TCGplayer and Cardmarket, captured daily · {CARDS_PAGE_SIZE} cards per page
+        Prices from PriceCharting, TCGplayer, and Cardmarket, captured daily · {CARDS_PAGE_SIZE} cards per page
       </footer>
     </div>
   );

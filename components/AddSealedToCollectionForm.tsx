@@ -2,6 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { addSealedToCollection } from "@/app/actions/collection";
+import {
+  SEALED_CONDITIONS,
+  SEALED_CONDITION_LABELS,
+  SEALED_CONDITION_OTHER_MAX_LENGTH,
+  type SealedCondition,
+} from "@/lib/sealed-condition";
 
 export function AddSealedToCollectionForm({
   sealedProductId,
@@ -13,14 +19,22 @@ export function AddSealedToCollectionForm({
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [cost, setCost] = useState("");
+  const [condition, setCondition] = useState<SealedCondition>("MINT");
+  const [otherDescription, setOtherDescription] = useState("");
 
   function handleAdd() {
     const parsed = parseFloat(cost);
     const costPerUnit = Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+    const conditionValue =
+      condition === "OTHER"
+        ? otherDescription.trim().slice(0, SEALED_CONDITION_OTHER_MAX_LENGTH) || "Other"
+        : SEALED_CONDITION_LABELS[condition];
     startTransition(async () => {
-      await addSealedToCollection(sealedProductId, costPerUnit);
+      await addSealedToCollection(sealedProductId, conditionValue, costPerUnit);
       setOpen(false);
       setCost("");
+      setCondition("MINT");
+      setOtherDescription("");
     });
   }
 
@@ -69,6 +83,32 @@ export function AddSealedToCollectionForm({
           </button>
         )}
       </div>
+
+      <label htmlFor="sealed-condition-select" className="font-body text-xs font-medium text-ink-muted">
+        Condition
+      </label>
+      <select
+        id="sealed-condition-select"
+        value={condition}
+        onChange={(e) => setCondition(e.target.value as SealedCondition)}
+        className="h-10 rounded-full border border-line bg-paper px-3 font-body text-sm text-ink outline-none focus:border-emerald"
+      >
+        {SEALED_CONDITIONS.map((code) => (
+          <option key={code} value={code}>
+            {SEALED_CONDITION_LABELS[code]}
+          </option>
+        ))}
+      </select>
+      {condition === "OTHER" && (
+        <input
+          type="text"
+          placeholder="Describe the condition"
+          maxLength={SEALED_CONDITION_OTHER_MAX_LENGTH}
+          value={otherDescription}
+          onChange={(e) => setOtherDescription(e.target.value)}
+          className="h-10 rounded-full border border-line bg-paper px-3 font-body text-sm text-ink outline-none focus:border-emerald"
+        />
+      )}
 
       <div className="flex items-center gap-3">
         <button

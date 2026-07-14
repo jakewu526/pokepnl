@@ -3,9 +3,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSealedProductDetail, SEALED_TYPE_LABELS } from "@/lib/sealed";
+import { getWatchlistedSealedIds } from "@/lib/watchlist";
+import { getCurrentUser } from "@/lib/dal";
 import { PriceChart } from "@/components/PriceChart";
 import { AuthNav } from "@/components/AuthNav";
 import { AddSealedToCollectionButton } from "@/components/AddSealedToCollectionButton";
+import { WatchlistHeartButton } from "@/components/WatchlistHeartButton";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -20,6 +23,8 @@ export default async function SealedProductDetailPage({
   const { id } = await params;
   const product = await getSealedProductDetail(id);
   if (!product) notFound();
+  const user = await getCurrentUser();
+  const watchedIds = user ? await getWatchlistedSealedIds(user.id, [id]) : new Set<string>();
 
   return (
     <div className="flex min-h-full flex-col">
@@ -53,6 +58,13 @@ export default async function SealedProductDetailPage({
               <div className="flex h-full items-center justify-center text-sm text-ink-muted">
                 {SEALED_TYPE_LABELS[product.type]}
               </div>
+            )}
+            {user && (
+              <WatchlistHeartButton
+                target={{ sealedProductId: product.id }}
+                initialWatched={watchedIds.has(product.id)}
+                className="absolute bottom-3 right-3"
+              />
             )}
           </div>
 

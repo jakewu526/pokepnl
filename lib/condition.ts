@@ -13,25 +13,13 @@ export const CONDITION_LABELS: Record<Condition, string> = {
   DMG: "Damaged",
 };
 
-// Fallback estimate used when neither TCGplayer nor eBay condition-level
-// pricing is available. Industry-standard rough percentages of the Near
-// Mint market price.
+// Rough industry-standard percentages of the Near Mint market price, used
+// to estimate what a collector's own graded-condition copy is worth (in the
+// collection/P&L views) -- not tied to any live per-condition price lookup.
 export const CONDITION_MULTIPLIERS: Record<Condition, number> = {
   NM: 1,
   LP: 0.85,
   MP: 0.7,
   HP: 0.5,
   DMG: 0.3,
-};
-
-// Best-effort guess; VERIFY against eBay's Taxonomy API
-// (GET /commerce/taxonomy/v1/category_tree/0/get_item_aspects_for_category?category_id=183454)
-// once EBAY_CLIENT_ID/SECRET are populated -- the exact aspect name and
-// value strings for the "CCG Individual Cards" category are unconfirmed.
-export const EBAY_CONDITION_ASPECT_NAME = "Card Condition";
-export const EBAY_CONDITION_ASPECT_VALUES: Record<Exclude<Condition, "NM">, string> = {
-  LP: "Lightly Played (Excellent)",
-  MP: "Moderately Played (Very Good)",
-  HP: "Heavily Played (Good)",
-  DMG: "Damaged (Poor)",
 };

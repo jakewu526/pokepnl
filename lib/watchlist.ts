@@ -1,9 +1,35 @@
 import { prisma } from "@/lib/prisma";
-import { CONDITION_MULTIPLIERS, type Condition } from "@/lib/condition";
 import type { PricePoint } from "@/lib/cards";
 import { buildSeries, priceAsOf } from "@/lib/price-series";
 
-export type PortfolioSummary = {
+// Returns the subset of `cardIds` the user is watching -- used by grid/detail
+// pages to decide which heart icons render filled. `userId` is null for
+// signed-out visitors, who can't have a watchlist.
+export async function getWatchlistedCardIds(
+  userId: string | null,
+  cardIds: string[]
+): Promise<Set<string>> {
+  if (!userId || cardIds.length === 0) return new Set();
+  const rows = await prisma.watchlistItem.findMany({
+    where: { userId, cardId: { in: cardIds } },
+    select: { cardId: true },
+  });
+  return new Set(rows.map((r) => r.cardId!));
+}
+
+export async function getWatchlistedSealedIds(
+  userId: string | null,
+  sealedProductIds: string[]
+): Promise<Set<string>> {
+  if (!userId || sealedProductIds.length === 0) return new Set();
+  const rows = await prisma.watchlistItem.findMany({
+    where: { userId, sealedProductId: { in: sealedProductIds } },
+    select: { sealedProductId: true },
+  });
+  return new Set(rows.map((r) => r.sealedProductId!));
+}
+
+export type WatchlistSummary = {
   totalValue: number;
   cardValue: number;
   sealedValue: number;
@@ -11,8 +37,8 @@ export type PortfolioSummary = {
   sealedCount: number;
 };
 
-export type PortfolioData = {
-  summary: PortfolioSummary;
+export type WatchlistData = {
+  summary: WatchlistSummary;
   history: PricePoint[];
 };
 
@@ -29,10 +55,15 @@ type SealedHistoryRow = {
   capturedDate: Date;
 };
 
-export async function getPortfolioData(userId: string): Promise<PortfolioData> {
-  const items = await prisma.collectionItem.findMany({
+// Value-over-time for a user's watchlist -- mirrors getPortfolioData in
+// lib/portfolio.ts, minus condition/cost (watchlist items aren't owned, so
+// there's no condition to scale by and no cost basis to track P&L against).
+// Same "don't backdate before it was added" rule applies: an item only
+// contributes to the chart from the date it was watchlisted.
+export async function getWatchlistData(userId: string): Promise<WatchlistData> {
+  const items = await prisma.watchlistItem.findMany({
     where: { userId },
-    select: { cardId: true, sealedProductId: true, condition: true, quantity: true, createdAt: true },
+    select: { cardId: true, sealedProductId: true, createdAt: true },
   });
 
   const cardIds = items.filter((i) => i.cardId).map((i) => i.cardId!);
@@ -62,10 +93,6 @@ export async function getPortfolioData(userId: string): Promise<PortfolioData> {
   const cardSeries = buildSeries(cardRows, (r) => r.cardId, "PRICECHARTING");
   const sealedSeries = buildSeries(sealedRows, (r) => r.sealedProductId, "PRICECHARTING");
 
-  // Don't backdate value the user didn't have yet -- an item only counts
-  // toward the chart from the date it was actually added to the collection,
-  // even though the underlying card/product may have years of price history
-  // from before the user owned (or even had an account for) it.
   const addedDateKey = (item: (typeof items)[number]) => item.createdAt.toISOString().slice(0, 10);
 
   const allDates = new Set<string>();
@@ -85,13 +112,10 @@ export async function getPortfolioData(userId: string): Promise<PortfolioData> {
       if (dateKey < addedDateKey(item)) continue;
       if (item.cardId) {
         const price = priceAsOf(cardSeries.get(item.cardId), dateKey);
-        if (price == null) continue;
-        const multiplier = CONDITION_MULTIPLIERS[(item.condition as Condition) ?? "NM"] ?? 1;
-        value += price * multiplier * item.quantity;
+        if (price != null) value += price;
       } else if (item.sealedProductId) {
         const price = priceAsOf(sealedSeries.get(item.sealedProductId), dateKey);
-        if (price == null) continue;
-        value += price * item.quantity;
+        if (price != null) value += price;
       }
     }
     return value;
@@ -101,21 +125,14 @@ export async function getPortfolioData(userId: string): Promise<PortfolioData> {
 
   let cardValue = 0;
   let sealedValue = 0;
-  let cardCount = 0;
-  let sealedCount = 0;
   const todayKey = sortedDates[sortedDates.length - 1];
   for (const item of items) {
     if (item.cardId) {
-      cardCount += item.quantity;
       const price = todayKey ? priceAsOf(cardSeries.get(item.cardId), todayKey) : null;
-      if (price != null) {
-        const multiplier = CONDITION_MULTIPLIERS[(item.condition as Condition) ?? "NM"] ?? 1;
-        cardValue += price * multiplier * item.quantity;
-      }
+      if (price != null) cardValue += price;
     } else if (item.sealedProductId) {
-      sealedCount += item.quantity;
       const price = todayKey ? priceAsOf(sealedSeries.get(item.sealedProductId), todayKey) : null;
-      if (price != null) sealedValue += price * item.quantity;
+      if (price != null) sealedValue += price;
     }
   }
 
@@ -124,8 +141,8 @@ export async function getPortfolioData(userId: string): Promise<PortfolioData> {
       totalValue: cardValue + sealedValue,
       cardValue,
       sealedValue,
-      cardCount,
-      sealedCount,
+      cardCount: cardIds.length,
+      sealedCount: sealedIds.length,
     },
     history,
   };

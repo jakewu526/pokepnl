@@ -40,6 +40,7 @@ model Card {
   priceSnapshots PriceSnapshot[]
   collectionItems CollectionItem[]
   transactions    Transaction[]
+  watchlistItems  WatchlistItem[]
 
   @@index([setId, number])
   @@index([name])
@@ -55,6 +56,7 @@ model User {
 
   collectionItems CollectionItem[]
   transactions    Transaction[]
+  watchlistItems  WatchlistItem[]
 }
 
 model CollectionItem {
@@ -72,6 +74,22 @@ model CollectionItem {
   sealedProduct SealedProduct? @relation(fields: [sealedProductId], references: [id])
 
   @@unique([userId, cardId, condition])
+  @@unique([userId, sealedProductId, condition])
+  @@index([userId])
+}
+
+model WatchlistItem {
+  id              String   @id @default(cuid())
+  userId          String
+  cardId          String?
+  sealedProductId String?
+  createdAt       DateTime @default(now())
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card          Card?          @relation(fields: [cardId], references: [id])
+  sealedProduct SealedProduct? @relation(fields: [sealedProductId], references: [id])
+
+  @@unique([userId, cardId])
   @@unique([userId, sealedProductId])
   @@index([userId])
 }
@@ -122,6 +140,7 @@ model SealedProduct {
   priceSnapshots  PriceSnapshot[]
   collectionItems CollectionItem[]
   transactions    Transaction[]
+  watchlistItems  WatchlistItem[]
 
   @@unique([setId, name])
   @@index([name])

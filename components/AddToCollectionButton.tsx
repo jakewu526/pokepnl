@@ -1,15 +1,12 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/dal";
 import { AddToCollectionForm } from "@/components/AddToCollectionForm";
-import type { Condition } from "@/lib/condition";
 
 export async function AddToCollectionButton({
   cardId,
-  condition,
   marketPrice,
 }: {
   cardId: string;
-  condition: Condition;
   marketPrice: number | null;
 }) {
   const user = await getCurrentUser();
@@ -25,5 +22,5 @@ export async function AddToCollectionButton({
     );
   }
 
-  return <AddToCollectionForm cardId={cardId} condition={condition} marketPrice={marketPrice} />;
+  return <AddToCollectionForm cardId={cardId} marketPrice={marketPrice} />;
 }

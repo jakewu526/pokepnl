@@ -1,15 +1,26 @@
 import "dotenv/config";
 import { prisma } from "@/lib/prisma";
-import { resolveConsoleSlug, getConsoleCatalog, type PriceChartingResult } from "@/lib/pricecharting";
 import { capturePriceSnapshot } from "@/lib/price-snapshot";
+import {
+  downloadPriceGuide,
+  buildConsoleIndex,
+  matchSetConsole,
+  isSealedGenre,
+  isForeignConsole,
+  tightNormalize,
+  resolveOrCreateSet,
+  firstErrorLine,
+  FLAT_PROMO_CONSOLE,
+  type PriceGuideRow,
+  type ConsoleIndex,
+} from "@/lib/pricecharting-api";
 
-// PriceCharting has no self-serve API -- see lib/pricecharting.ts for why we
-// scrape its public pages instead. Per-type text search ("Pokemon {set}
-// elite trainer box") gets flooded with individual-card results that also
-// match "Pokemon {set}", burying the actual sealed product past the
-// ~100-result cap. Fetching each set's full console catalog page instead
-// (one request, after resolving its slug) reliably surfaces every sealed
-// product regardless of how PriceCharting's fuzzy search would rank it.
+// Sources sealed products from the same bulk price-guide download used by
+// ingest-cards-pricecharting.ts instead of scraping each set's console page
+// individually -- one HTTP request instead of ~173, and it catches sets the
+// old per-console `resolveConsoleSlug` search missed (its exact-normalized-
+// match requirement failed on classic-era sets like "Base" vs PriceCharting's
+// "Pokemon Base Set").
 
 // Word-boundary matches only -- a bare /tin/i also matches "Victini",
 // "Latin", etc. as substrings, silently classifying an individual card as
@@ -31,15 +42,7 @@ const TYPE_PATTERNS: { type: string; pattern: RegExp }[] = [
 // skip these rather than guessing which one is "the" product for the set.
 const EXCLUDE_PATTERNS = [/pokemon center/i, /prerelease/i, /promo/i, /staff/i, /kit/i];
 
-// Individual cards are listed with a card number ("#30", "030/236") --
-// a card named e.g. "Tin Cup" would otherwise pass the word-boundary regex
-// above and get misclassified as a sealed Tin.
-function looksLikeIndividualCard(name: string): boolean {
-  return /#\d|\d+\/\d+/.test(name);
-}
-
 function classify(name: string): string | null {
-  if (looksLikeIndividualCard(name)) return null;
   if (EXCLUDE_PATTERNS.some((p) => p.test(name))) return null;
   const match = TYPE_PATTERNS.find((t) => t.pattern.test(name));
   return match?.type ?? null;
@@ -55,100 +58,134 @@ const SUFFIX_BY_TYPE: Record<string, string> = {
   TIN: "Tin",
 };
 
-const REQUEST_DELAY_MS = 1000;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function upsertSealedProduct(
-  setId: string,
-  setName: string,
+  setId: string | null,
+  setName: string | null,
   type: string,
-  match: PriceChartingResult
-): Promise<boolean> {
-  const name = `${setName} ${SUFFIX_BY_TYPE[type]}`;
-  try {
-    const product = await prisma.sealedProduct.upsert({
-      where: { setId_name: { setId, name } },
-      create: {
-        setId,
-        name,
-        type: type as never,
-        pricechartingId: match.pricechartingId,
-        imageUrl: match.imageUrl,
-      },
-      update: { name, pricechartingId: match.pricechartingId, imageUrl: match.imageUrl },
-    });
+  row: PriceGuideRow
+): Promise<"linked" | "created" | "skipped"> {
+  if (row.loosePrice == null) return "skipped";
+  const name = setName ? `${setName} ${SUFFIX_BY_TYPE[type]}` : row.productName;
 
+  try {
+    // Prisma's typed compound-unique `where` rejects `null` for a component
+    // field, so setId_name can't be used via upsert() when setId is null
+    // (flat-promo-console sealed items with no set) -- findFirst + create/
+    // update works for both cases.
+    const existing = await prisma.sealedProduct.findFirst({ where: { setId, name } });
+    if (existing) {
+      await prisma.sealedProduct.update({
+        where: { id: existing.id },
+        data: { pricechartingId: row.pricechartingId },
+      });
+    } else {
+      await prisma.sealedProduct.create({
+        data: { setId, name, type: type as never, pricechartingId: row.pricechartingId },
+      });
+    }
+
+    const product = existing ?? (await prisma.sealedProduct.findFirst({ where: { setId, name } }))!;
     await capturePriceSnapshot({
       entityId: product.id,
       entityField: "sealedProductId",
       source: "PRICECHARTING",
       priceType: "MARKET",
       condition: null,
-      price: match.price!,
+      price: row.loosePrice,
     });
 
-    console.log(`  ${name}: $${match.price!.toFixed(2)}`);
-    return true;
+    console.log(`  ${name}: $${row.loosePrice.toFixed(2)}`);
+    return existing ? "linked" : "created";
   } catch (err) {
     // A pricechartingId can occasionally collide with a product already
     // attached to a different set (e.g. a shared cross-set promo item) --
     // skip it rather than aborting the whole ingestion run.
-    console.log(`  Skipping "${name}": ${err instanceof Error ? err.message.split("\n")[0] : err}`);
-    return false;
+    console.log(`  Skipping "${name}": ${firstErrorLine(err)}`);
+    return "skipped";
   }
 }
 
-async function processSet(setId: string, setName: string): Promise<number> {
-  const slug = await resolveConsoleSlug(setName);
-  if (!slug) {
-    console.log(`  No PriceCharting console match for "${setName}"`);
-    return 0;
+// Keep only the best (highest sales-volume) match per type -- a console can
+// list multiple variants of the same product (e.g. "Booster Box" and
+// "Booster Box [24-Pack]"), and sales-volume is a better proxy for "the"
+// canonical listing than whichever row happened to come first in the CSV.
+function pickBestPerType(rows: PriceGuideRow[]): Map<string, PriceGuideRow> {
+  const byType = new Map<string, PriceGuideRow>();
+  for (const row of rows) {
+    if (!isSealedGenre(row.genre) || row.loosePrice == null) continue;
+    const type = classify(row.productName);
+    if (!type) continue;
+    const current = byType.get(type);
+    if (!current || row.salesVolume > current.salesVolume) byType.set(type, row);
   }
-
-  const catalog = await getConsoleCatalog(slug);
-
-  // Keep only the first (best) match per type -- a console page can list
-  // multiple variants (e.g. "Booster Box" and "Booster Box [24-Pack]").
-  const byType = new Map<string, PriceChartingResult>();
-  for (const item of catalog) {
-    if (item.price == null) continue;
-    const type = classify(item.name);
-    if (!type || byType.has(type)) continue;
-    byType.set(type, item);
-  }
-
-  let matched = 0;
-  for (const [type, match] of byType) {
-    if (await upsertSealedProduct(setId, setName, type, match)) matched += 1;
-  }
-  if (matched === 0) {
-    console.log(`  No sealed products found in "${setName}" console catalog (${catalog.length} rows)`);
-  }
-  return matched;
+  return byType;
 }
 
 async function main() {
-  const sets = await prisma.cardSet.findMany({
-    orderBy: { releaseDate: "desc" },
-    select: { id: true, name: true },
-  });
+  console.log("Downloading PriceCharting price guide (pokemon-cards)...");
+  const rows = await downloadPriceGuide("pokemon-cards");
+  console.log(`Downloaded ${rows.length} rows.`);
 
-  let matched = 0;
+  const index: ConsoleIndex = buildConsoleIndex(rows);
+  const sets = await prisma.cardSet.findMany({ select: { id: true, name: true } });
+
+  const claimedKeys = new Set<string>();
+  const totals = { linked: 0, created: 0, skipped: 0, newSets: 0 };
+
   for (const set of sets) {
-    console.log(`Searching sealed product for "${set.name}"...`);
-    try {
-      matched += await processSet(set.id, set.name);
-    } catch (err) {
-      // A single flaky/rate-limited request shouldn't abort the whole run.
-      console.log(`  Request failed: ${err instanceof Error ? err.message : err}`);
+    const consoleRows = matchSetConsole(set.name, index);
+    if (!consoleRows) continue;
+
+    const key = tightNormalize(consoleRows[0].consoleName);
+    claimedKeys.add(key);
+    if (key === tightNormalize(FLAT_PROMO_CONSOLE)) continue; // no single set to attach these to
+
+    const byType = pickBestPerType(consoleRows);
+    if (byType.size === 0) continue;
+    console.log(`${set.name}:`);
+    for (const [type, row] of byType) {
+      const result = await upsertSealedProduct(set.id, set.name, type, row);
+      totals[result] += 1;
     }
-    await sleep(REQUEST_DELAY_MS);
   }
 
-  console.log(`Captured prices for ${matched} sealed products.`);
+  // Consoles with sealed rows but no matching CardSet -- create a set for
+  // them (unless it's the flat promo bucket, which has no natural set).
+  for (const [key, entry] of index) {
+    if (claimedKeys.has(key)) continue;
+    if (key === tightNormalize(FLAT_PROMO_CONSOLE)) continue;
+    if (isForeignConsole(entry.consoleName)) continue;
+
+    const byType = pickBestPerType(entry.rows);
+    if (byType.size === 0) continue;
+
+    const { id, created } = await resolveOrCreateSet(entry.consoleName);
+    if (created) totals.newSets += 1;
+    const setName = entry.consoleName.replace(/^Pokemon\s+/i, "");
+    console.log(`${setName}${created ? " (new set)" : ""}:`);
+    for (const [type, row] of byType) {
+      const result = await upsertSealedProduct(id, setName, type, row);
+      totals[result] += 1;
+    }
+  }
+
+  // Flat promo-console sealed items (boxes/blisters sold as standalone
+  // promos, not tied to a numbered set) get no CardSet -- store them under
+  // their raw PriceCharting product name instead of a "<set> <type>" name.
+  const promoEntry = index.get(tightNormalize(FLAT_PROMO_CONSOLE));
+  if (promoEntry) {
+    const sealedPromoRows = promoEntry.rows.filter((r) => isSealedGenre(r.genre) && r.loosePrice != null);
+    console.log(`\nProcessing flat "${FLAT_PROMO_CONSOLE}" sealed items (${sealedPromoRows.length} rows)...`);
+    for (const row of sealedPromoRows) {
+      const type = classify(row.productName) ?? "OTHER";
+      const result = await upsertSealedProduct(null, null, type, row);
+      totals[result] += 1;
+    }
+  }
+
+  console.log(
+    `\nDone. Linked ${totals.linked} existing sealed products, created ${totals.created} new ones across ${totals.newSets} new sets (${totals.skipped} skipped).`
+  );
 }
 
 main()

@@ -23,7 +23,7 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Binder — Pokémon card & price tracker",
   description:
-    "Browse the full Pokémon TCG catalog with current market prices, sourced daily from TCGplayer and Cardmarket.",
+    "Browse the full Pokémon TCG catalog with current market prices, sourced daily from PriceCharting, TCGplayer, and Cardmarket.",
 };
 
 export default function RootLayout({

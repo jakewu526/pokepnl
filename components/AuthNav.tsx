@@ -26,6 +26,9 @@ export async function AuthNav() {
       <Link href="/collection" className="font-medium text-emerald-strong hover:underline">
         My Collection
       </Link>
+      <Link href="/watchlist" className="font-medium text-emerald-strong hover:underline">
+        Watchlist
+      </Link>
       <span className="hidden text-ink-muted sm:inline">{user.name ?? user.email}</span>
       <form action={logout}>
         <button type="submit" className="font-medium text-ink-muted hover:text-ink">

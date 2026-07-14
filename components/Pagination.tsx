@@ -1,11 +1,9 @@
 import Link from "next/link";
-import type { Condition } from "@/lib/condition";
 
-function buildHref(query: string, page: number, condition: Condition): string {
+function buildHref(query: string, page: number): string {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
   if (page > 1) params.set("page", String(page));
-  if (condition !== "NM") params.set("condition", condition);
   const qs = params.toString();
   return qs ? `/?${qs}` : "/";
 }
@@ -14,12 +12,10 @@ export function Pagination({
   query,
   page,
   pageCount,
-  condition = "NM",
 }: {
   query: string;
   page: number;
   pageCount: number;
-  condition?: Condition;
 }) {
   const hasPrev = page > 1;
   const hasNext = page < pageCount;
@@ -31,7 +27,7 @@ export function Pagination({
     >
       {hasPrev ? (
         <Link
-          href={buildHref(query, page - 1, condition)}
+          href={buildHref(query, page - 1)}
           className="flex h-11 items-center rounded-full border border-line px-4 font-body text-sm font-medium text-ink hover:border-emerald hover:text-emerald-strong"
         >
           ← Previous
@@ -48,7 +44,7 @@ export function Pagination({
 
       {hasNext ? (
         <Link
-          href={buildHref(query, page + 1, condition)}
+          href={buildHref(query, page + 1)}
           className="flex h-11 items-center rounded-full border border-line px-4 font-body text-sm font-medium text-ink hover:border-emerald hover:text-emerald-strong"
         >
           Next →

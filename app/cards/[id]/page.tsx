@@ -1,13 +1,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getCardDetail } from "@/lib/cards";
-import { isCondition } from "@/lib/condition";
+import { getCardDetail, getCardGradeHistories } from "@/lib/cards";
+import { getWatchlistedCardIds } from "@/lib/watchlist";
+import { getCurrentUser } from "@/lib/dal";
 import { Suspense } from "react";
 import { PriceChart } from "@/components/PriceChart";
-import { ConditionFilter } from "@/components/ConditionFilter";
+import { GradePriceChart } from "@/components/GradePriceChart";
 import { AuthNav } from "@/components/AuthNav";
 import { AddToCollectionButton } from "@/components/AddToCollectionButton";
+import { WatchlistHeartButton } from "@/components/WatchlistHeartButton";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -20,27 +22,21 @@ function formatNumber(number: string, setTotal: number | null): string {
   return `${padded}/${setTotal}`;
 }
 
-function priceLabel(card: { priceEstimated: boolean; priceRealSource: "TCGPLAYER" | "EBAY" | null }) {
-  if (card.priceRealSource === "TCGPLAYER") return "TCGplayer";
-  if (card.priceRealSource === "EBAY") return "eBay listings";
-  if (card.priceEstimated) return "Estimated · condition proxy";
-  return null;
-}
-
 export default async function CardDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ condition?: string }>;
 }) {
   const { id } = await params;
-  const searchParamsResolved = await searchParams;
-  const condition = isCondition(searchParamsResolved.condition)
-    ? searchParamsResolved.condition
-    : "NM";
-  const card = await getCardDetail(id, condition);
+  const card = await getCardDetail(id);
   if (!card) notFound();
+  const [gradeHistories, user] = await Promise.all([getCardGradeHistories(id), getCurrentUser()]);
+  const watchedIds = user ? await getWatchlistedCardIds(user.id, [id]) : new Set<string>();
+  // More than one series means real graded-tier data exists (PSA-style
+  // Grade 7 through Grade 10, not just the single Ungraded/raw price) --
+  // otherwise fall back to the single-source chart, which already shows
+  // whatever price data is available (PriceCharting/TCGplayer/Cardmarket).
+  const hasGradeData = gradeHistories.length > 1;
 
   return (
     <div className="flex min-h-full flex-col">
@@ -53,7 +49,6 @@ export default async function CardDetailPage({
             ← Binder
           </Link>
           <div className="flex items-center gap-4">
-            <ConditionFilter condition={condition} />
             <Suspense fallback={null}>
               <AuthNav />
             </Suspense>
@@ -83,6 +78,13 @@ export default async function CardDetailPage({
                 {card.rarity}
               </span>
             )}
+            {user && (
+              <WatchlistHeartButton
+                target={{ cardId: card.id }}
+                initialWatched={watchedIds.has(card.id)}
+                className="absolute bottom-3 right-3"
+              />
+            )}
           </div>
 
           <div className="flex flex-col gap-6">
@@ -104,14 +106,9 @@ export default async function CardDetailPage({
 
               <div className="mt-4">
                 {card.price != null ? (
-                  <>
-                    <p className="font-data text-3xl font-medium text-emerald-strong">
-                      {priceFormatter.format(card.price)}
-                    </p>
-                    {priceLabel(card) && (
-                      <p className="mt-1 font-body text-xs text-ink-muted">{priceLabel(card)}</p>
-                    )}
-                  </>
+                  <p className="font-data text-3xl font-medium text-emerald-strong">
+                    {priceFormatter.format(card.price)}
+                  </p>
                 ) : (
                   <p className="font-data text-lg text-ink-muted">No price yet</p>
                 )}
@@ -119,21 +116,27 @@ export default async function CardDetailPage({
 
               <div className="mt-4">
                 <Suspense fallback={null}>
-                  <AddToCollectionButton cardId={card.id} condition={condition} marketPrice={card.price} />
+                  <AddToCollectionButton cardId={card.id} marketPrice={card.price} />
                 </Suspense>
               </div>
             </div>
 
             <div>
-              <h2 className="mb-2 font-body text-sm font-semibold text-ink">Price history</h2>
-              <PriceChart points={card.history} source={card.priceSource} />
+              <h2 className="mb-2 font-body text-sm font-semibold text-ink">
+                {hasGradeData ? "Price by grade" : "Price history"}
+              </h2>
+              {hasGradeData ? (
+                <GradePriceChart series={gradeHistories} />
+              ) : (
+                <PriceChart points={card.history} source={card.priceSource} />
+              )}
             </div>
           </div>
         </div>
       </main>
 
       <footer className="border-t border-line px-4 py-4 text-center font-data text-xs text-ink-muted sm:px-6">
-        Prices from TCGplayer and Cardmarket, captured daily
+        Prices from PriceCharting, TCGplayer, and Cardmarket, captured daily
       </footer>
     </div>
   );
