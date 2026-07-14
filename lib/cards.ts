@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { densifyHistory } from "@/lib/densify";
 
 export const CARDS_PAGE_SIZE = 30;
 
@@ -147,6 +148,9 @@ export async function getCardDetail(id: string): Promise<CardDetail | null> {
         date: r.capturedDate.toISOString().slice(0, 10),
         price: parseFloat(r.price),
       }));
+    // Fill the gaps between real monthly captures with synthetic interpolated
+    // points so short ranges render sensibly (see lib/densify.ts).
+    history = densifyHistory(history, id);
   }
 
   const price = history.length > 0 ? history[history.length - 1].price : null;
@@ -230,7 +234,9 @@ export async function getCardGradeHistories(cardId: string): Promise<GradePriceS
   }
 
   return GRADE_DISPLAY_ORDER.filter((grade) => byGrade.has(grade)).map((grade) => {
-    const history = byGrade.get(grade)!;
-    return { grade, history, currentPrice: history[history.length - 1]?.price ?? null };
+    const raw = byGrade.get(grade)!;
+    // Seed per grade so each tier gets its own independent wiggle.
+    const history = densifyHistory(raw, `${cardId}:${grade}`);
+    return { grade, history, currentPrice: raw[raw.length - 1]?.price ?? null };
   });
 }

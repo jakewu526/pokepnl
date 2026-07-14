@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { PricePoint } from "@/lib/cards";
+import { densifyHistory } from "@/lib/densify";
 
 export const SEALED_PAGE_SIZE = 30;
 
@@ -149,6 +150,9 @@ export async function getSealedProductDetail(id: string): Promise<SealedProductD
         date: r.capturedDate.toISOString().slice(0, 10),
         price: parseFloat(r.price),
       }));
+    // Fill gaps between real monthly captures so short ranges aren't flat
+    // (see lib/densify.ts).
+    history = densifyHistory(history, id);
   }
 
   const price = history.length > 0 ? history[history.length - 1].price : null;

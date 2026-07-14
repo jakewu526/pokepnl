@@ -128,7 +128,7 @@ export default async function CardDetailPage({
               {hasGradeData ? (
                 <GradePriceChart series={gradeHistories} />
               ) : (
-                <PriceChart points={card.history} source={card.priceSource} />
+                <PriceChart points={card.history} source={card.priceSource} showRangeControls />
               )}
             </div>
           </div>

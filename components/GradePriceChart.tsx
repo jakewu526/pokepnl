@@ -1,7 +1,17 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import type { GradePriceSeries } from "@/lib/cards";
+import {
+  type RangeKey,
+  defaultRangeKey,
+  filterPointsToRange,
+  formatAxisDate,
+  formatRangeCaption,
+  getAvailableRanges,
+  parseLocalDate,
+} from "@/lib/chart-format";
+import { useAnimatedDomain } from "./useAnimatedDomain";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -14,17 +24,7 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
-const axisDateFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-});
-
-// See `new Date("2026-07-12")` comment in PriceChart.tsx -- date-only
-// strings need local-calendar parsing, not UTC.
-function parseLocalDate(dateStr: string): Date {
-  const [year, month, day] = dateStr.split("-").map(Number);
-  return new Date(year, month - 1, day);
-}
+const DAY_MS = 86_400_000;
 
 // Fixed order + colors, matching lib/cards.ts's GRADE_DISPLAY_ORDER and the
 // --series-* custom properties in app/globals.css (validated for CVD
@@ -41,67 +41,84 @@ const GRADE_COLOR_VARS: Record<string, string> = {
 
 const WIDTH = 720;
 const HEIGHT = 280;
-const PAD_LEFT = 56;
-const PAD_RIGHT = 16;
+const PAD_LEFT = 76;
+const PAD_RIGHT = 20;
 const PAD_TOP = 16;
 const PAD_BOTTOM = 32;
 
 export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
+  const clipId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [range, setRange] = useState<RangeKey | null>(null);
 
-  const visibleSeries = series.filter((s) => !hidden.has(s.grade));
+  // Ranges offered depend on the full history across every grade, so the
+  // buttons don't change as grades are hidden/shown.
+  const allDates = useMemo(
+    () => series.flatMap((s) => s.history.map((p) => p.date)),
+    [series]
+  );
+  const available = useMemo(() => getAvailableRanges(allDates), [allDates]);
+  const effectiveRange: RangeKey =
+    range && available.some((o) => o.key === range) ? range : defaultRangeKey(available);
+  const maxTs = useMemo(
+    () => (allDates.length ? Math.max(...allDates.map((d) => parseLocalDate(d).getTime())) : 0),
+    [allDates]
+  );
 
-  const layout = useMemo(() => {
-    const allDates = Array.from(
+  const rangedSeries = useMemo(
+    () =>
+      series.map((s) => ({
+        ...s,
+        history: filterPointsToRange(s.history, effectiveRange, maxTs),
+      })),
+    [series, effectiveRange, maxTs]
+  );
+
+  const visibleSeries = rangedSeries.filter((s) => !hidden.has(s.grade));
+
+  // Static domain of the selected range (stable during the zoom animation).
+  const view = useMemo(() => {
+    const dates = Array.from(
       new Set(visibleSeries.flatMap((s) => s.history.map((p) => p.date)))
     ).sort();
-    if (allDates.length === 0) return null;
-
-    const timestamps = allDates.map((d) => parseLocalDate(d).getTime());
+    if (dates.length === 0) return null;
+    const timestamps = dates.map((d) => parseLocalDate(d).getTime());
     const minDate = Math.min(...timestamps);
     const maxDate = Math.max(...timestamps);
     const allPrices = visibleSeries.flatMap((s) => s.history.map((p) => p.price));
-    const maxPriceRaw = Math.max(0, ...allPrices);
-    const maxPrice = maxPriceRaw === 0 ? 1 : maxPriceRaw * 1.1;
-
-    const xScale = (t: number) =>
-      timestamps.length > 1 && maxDate !== minDate
-        ? PAD_LEFT + ((t - minDate) / (maxDate - minDate)) * (WIDTH - PAD_LEFT - PAD_RIGHT)
-        : (PAD_LEFT + (WIDTH - PAD_RIGHT)) / 2;
-
-    const yScale = (p: number) =>
-      HEIGHT - PAD_BOTTOM - (p / maxPrice) * (HEIGHT - PAD_TOP - PAD_BOTTOM);
-
-    const seriesLines = visibleSeries.map((s) => ({
-      grade: s.grade,
-      coords: s.history.map((p) => ({
-        x: xScale(parseLocalDate(p.date).getTime()),
-        y: yScale(p.price),
-        point: p,
-      })),
-    }));
-
-    const priceTicks = 4;
-    const yTicks = Array.from({ length: priceTicks + 1 }, (_, i) => {
-      const value = (maxPrice / priceTicks) * i;
-      return { value, y: yScale(value) };
-    });
-
-    const xTickCount = Math.min(5, allDates.length);
-    const xTicks =
-      allDates.length > 1
-        ? Array.from({ length: xTickCount }, (_, i) => {
-            const t = minDate + ((maxDate - minDate) * i) / (xTickCount - 1 || 1);
-            return { t, x: xScale(t) };
-          })
-        : [];
-
-    const dateToX = new Map(allDates.map((d) => [d, xScale(parseLocalDate(d).getTime())]));
-
-    return { seriesLines, yTicks, xTicks, allDates, dateToX };
+    // Tighten the y-axis to the visible grades' price range so short-range
+    // moves stay legible; when a single grade is isolated it zooms right in.
+    const lo = Math.min(...allPrices);
+    const hi = Math.max(...allPrices);
+    const span = hi - lo;
+    const pad = span > 0 ? span * 0.15 : Math.max(Math.abs(hi) * 0.05, 1);
+    let minPrice = Math.max(0, lo - pad);
+    let maxPrice = hi + pad;
+    if (maxPrice <= minPrice) maxPrice = minPrice + 1;
+    return { dates, minDate, maxDate, minPrice, maxPrice, spanDays: (maxDate - minDate) / DAY_MS };
   }, [visibleSeries]);
+
+  const { domain: animated, from, animating } = useAnimatedDomain(
+    view ?? { minDate: 0, maxDate: 1, minPrice: 0, maxPrice: 1 }
+  );
+
+  // During a transition render the wider (previous ∪ target) span so a zoom-in
+  // keeps every line spanning full width instead of flashing empty space.
+  const renderMinDate = animating
+    ? Math.min(from.minDate, view?.minDate ?? from.minDate)
+    : view?.minDate ?? Number.NEGATIVE_INFINITY;
+  const renderSeries = useMemo(
+    () =>
+      series
+        .filter((s) => !hidden.has(s.grade))
+        .map((s) => ({
+          ...s,
+          history: s.history.filter((p) => parseLocalDate(p.date).getTime() >= renderMinDate),
+        })),
+    [series, hidden, renderMinDate]
+  );
 
   if (series.length === 0) {
     return (
@@ -111,6 +128,44 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
       </div>
     );
   }
+
+  const { minDate, maxDate, minPrice, maxPrice } = animated;
+  const xScale = (t: number) =>
+    maxDate !== minDate
+      ? PAD_LEFT + ((t - minDate) / (maxDate - minDate)) * (WIDTH - PAD_LEFT - PAD_RIGHT)
+      : (PAD_LEFT + (WIDTH - PAD_RIGHT)) / 2;
+  const yScale = (p: number) =>
+    HEIGHT - PAD_BOTTOM - ((p - minPrice) / (maxPrice - minPrice)) * (HEIGHT - PAD_TOP - PAD_BOTTOM);
+
+  const visibleDates = view ? view.dates : [];
+  const seriesLines = renderSeries.map((s) => ({
+    grade: s.grade,
+    coords: s.history.map((p) => ({
+      x: xScale(parseLocalDate(p.date).getTime()),
+      y: yScale(p.price),
+      point: p,
+    })),
+  }));
+  const dateToX = new Map(visibleDates.map((d) => [d, xScale(parseLocalDate(d).getTime())]));
+
+  const priceTicks = 4;
+  const yTicks = Array.from({ length: priceTicks + 1 }, (_, i) => {
+    const value = minPrice + ((maxPrice - minPrice) / priceTicks) * i;
+    return { value, y: yScale(value) };
+  });
+
+  const xTickCount = Math.min(5, visibleDates.length);
+  const xTicks =
+    view && visibleDates.length > 1
+      ? Array.from({ length: xTickCount }, (_, i) => {
+          const t = view.minDate + ((view.maxDate - view.minDate) * i) / (xTickCount - 1 || 1);
+          return { t, label: formatAxisDate(t, view.spanDays) };
+        })
+      : [];
+
+  const canPlot = seriesLines.some((s) => s.coords.length > 1);
+  const hoverDate =
+    hoverIndex != null && hoverIndex < visibleDates.length ? visibleDates[hoverIndex] : null;
 
   function toggle(grade: string) {
     setHidden((prev) => {
@@ -123,13 +178,13 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
 
   function handleMove(clientX: number) {
     const el = containerRef.current;
-    if (!el || !layout) return;
+    if (!el) return;
     const rect = el.getBoundingClientRect();
     const relX = ((clientX - rect.left) / rect.width) * WIDTH;
     let nearest = 0;
     let nearestDist = Infinity;
-    layout.allDates.forEach((date, i) => {
-      const dist = Math.abs((layout.dateToX.get(date) ?? 0) - relX);
+    visibleDates.forEach((date, i) => {
+      const dist = Math.abs((dateToX.get(date) ?? 0) - relX);
       if (dist < nearestDist) {
         nearestDist = dist;
         nearest = i;
@@ -138,11 +193,9 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
     setHoverIndex(nearest);
   }
 
-  const hoverDate = layout && hoverIndex != null ? layout.allDates[hoverIndex] : null;
-
   return (
     <div className="rounded-card border border-line bg-paper-raised p-3">
-      {layout && layout.seriesLines.some((s) => s.coords.length > 1) ? (
+      {canPlot ? (
         <div ref={containerRef} className="relative w-full">
           <svg
             viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
@@ -153,7 +206,18 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
             onTouchMove={(e) => handleMove(e.touches[0].clientX)}
             onTouchEnd={() => setHoverIndex(null)}
           >
-            {layout.yTicks.map((tick, i) => (
+            <defs>
+              <clipPath id={clipId}>
+                <rect
+                  x={PAD_LEFT}
+                  y={PAD_TOP}
+                  width={WIDTH - PAD_LEFT - PAD_RIGHT}
+                  height={HEIGHT - PAD_TOP - PAD_BOTTOM}
+                />
+              </clipPath>
+            </defs>
+
+            {yTicks.map((tick, i) => (
               <g key={i}>
                 <line
                   x1={PAD_LEFT}
@@ -177,55 +241,55 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
               </g>
             ))}
 
-            {layout.xTicks.map((tick, i) => (
+            {xTicks.map((tick, i) => (
               <text
                 key={i}
-                x={tick.x}
+                x={xScale(tick.t)}
                 y={HEIGHT - PAD_BOTTOM + 20}
-                textAnchor="middle"
+                textAnchor={i === 0 ? "start" : i === xTicks.length - 1 ? "end" : "middle"}
                 className="font-data"
                 fontSize={11}
                 fill="var(--ink-muted)"
               >
-                {axisDateFormatter.format(new Date(tick.t))}
+                {tick.label}
               </text>
             ))}
 
-            {hoverDate && (
-              <line
-                x1={layout.dateToX.get(hoverDate) ?? 0}
-                x2={layout.dateToX.get(hoverDate) ?? 0}
-                y1={PAD_TOP}
-                y2={HEIGHT - PAD_BOTTOM}
-                stroke="var(--ink-muted)"
-                strokeWidth={1}
-                strokeDasharray="4 3"
-                opacity={0.4}
-              />
-            )}
+            <g clipPath={`url(#${clipId})`}>
+              {hoverDate && (
+                <line
+                  x1={dateToX.get(hoverDate) ?? 0}
+                  x2={dateToX.get(hoverDate) ?? 0}
+                  y1={PAD_TOP}
+                  y2={HEIGHT - PAD_BOTTOM}
+                  stroke="var(--ink-muted)"
+                  strokeWidth={1}
+                  strokeDasharray="4 3"
+                  opacity={0.4}
+                />
+              )}
 
-            {layout.seriesLines.map((s) => {
-              const pathD = s.coords.map((c, i) => `${i === 0 ? "M" : "L"} ${c.x} ${c.y}`).join(" ");
-              const hoveredCoord =
-                hoverIndex != null
-                  ? s.coords.find((c) => c.point.date === hoverDate)
-                  : undefined;
-              return (
-                <g key={s.grade}>
-                  <path d={pathD} fill="none" stroke={GRADE_COLOR_VARS[s.grade]} strokeWidth={2} />
-                  {hoveredCoord && (
-                    <circle
-                      cx={hoveredCoord.x}
-                      cy={hoveredCoord.y}
-                      r={4}
-                      fill={GRADE_COLOR_VARS[s.grade]}
-                      stroke="var(--paper-raised)"
-                      strokeWidth={2}
-                    />
-                  )}
-                </g>
-              );
-            })}
+              {seriesLines.map((s) => {
+                const pathD = s.coords.map((c, i) => `${i === 0 ? "M" : "L"} ${c.x} ${c.y}`).join(" ");
+                const hoveredCoord =
+                  hoverDate != null ? s.coords.find((c) => c.point.date === hoverDate) : undefined;
+                return (
+                  <g key={s.grade}>
+                    <path d={pathD} fill="none" stroke={GRADE_COLOR_VARS[s.grade]} strokeWidth={2} />
+                    {hoveredCoord && (
+                      <circle
+                        cx={hoveredCoord.x}
+                        cy={hoveredCoord.y}
+                        r={4}
+                        fill={GRADE_COLOR_VARS[s.grade]}
+                        stroke="var(--paper-raised)"
+                        strokeWidth={2}
+                      />
+                    )}
+                  </g>
+                );
+              })}
+            </g>
           </svg>
 
           {hoverDate && (
@@ -237,7 +301,7 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
                 {dateFormatter.format(parseLocalDate(hoverDate))}
               </p>
               <div className="flex flex-col gap-0.5">
-                {layout.seriesLines.map((s) => {
+                {seriesLines.map((s) => {
                   const point = s.coords.find((c) => c.point.date === hoverDate)?.point;
                   if (!point) return null;
                   return (
@@ -262,6 +326,37 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
       ) : (
         <div className="flex h-[280px] flex-col items-center justify-center gap-1 text-center">
           <p className="font-body text-sm text-ink-muted">History builds daily — check back over time.</p>
+        </div>
+      )}
+
+      {view && (
+        <p className="mt-2 font-data text-[11px] text-ink-muted">
+          {formatRangeCaption(view.minDate, view.maxDate)}
+        </p>
+      )}
+
+      {available.length >= 2 && (
+        <div className="mt-3 flex flex-wrap gap-1.5 border-t border-line pt-3">
+          {available.map((o) => {
+            const selected = o.key === effectiveRange;
+            return (
+              <button
+                key={o.key}
+                type="button"
+                onClick={() => {
+                  setRange(o.key);
+                  setHoverIndex(null);
+                }}
+                className={`rounded px-2.5 py-1 font-body text-xs font-medium transition ${
+                  selected
+                    ? "bg-ink text-paper"
+                    : "border border-line text-ink-muted hover:bg-paper hover:text-ink"
+                }`}
+              >
+                {o.label}
+              </button>
+            );
+          })}
         </div>
       )}
 
