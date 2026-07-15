@@ -18,6 +18,7 @@
     "link:tcgplayer": "tsx scripts/link-tcgplayer-ids.ts",
     "backfill:pricecharting": "tsx scripts/backfill-pricecharting-history.ts",
     "backfill:pricecharting:details": "tsx scripts/backfill-pricecharting-details.ts",
+    "backfill:set-branding": "tsx scripts/backfill-set-branding.ts",
     "snapshot:prices": "tsx scripts/snapshot-prices.ts",
     "report:counts": "tsx scripts/report-counts.ts"
   },

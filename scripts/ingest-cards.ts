@@ -11,6 +11,8 @@ type PokemonTcgSet = {
   series: string;
   releaseDate: string;
   total: number;
+  ptcgoCode?: string;
+  images?: { symbol?: string; logo?: string };
 };
 
 // pokemontcg.io mirrors TCGplayer and Cardmarket pricing on every card for
@@ -130,12 +132,18 @@ async function ingestSets(): Promise<void> {
         series: set.series,
         releaseDate: set.releaseDate ? new Date(set.releaseDate) : null,
         totalCards: set.total,
+        code: set.ptcgoCode,
+        logoUrl: set.images?.logo,
+        symbolUrl: set.images?.symbol,
       },
       update: {
         name: set.name,
         series: set.series,
         releaseDate: set.releaseDate ? new Date(set.releaseDate) : null,
         totalCards: set.total,
+        code: set.ptcgoCode,
+        logoUrl: set.images?.logo,
+        symbolUrl: set.images?.symbol,
       },
     });
   }

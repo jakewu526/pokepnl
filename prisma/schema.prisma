@@ -13,6 +13,9 @@ model CardSet {
   series         String?
   releaseDate    DateTime?
   totalCards     Int?
+  code           String?
+  logoUrl        String?
+  symbolUrl      String?
   pokemonTcgIoId String?  @unique
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
