@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SignupForm } from "@/components/SignupForm";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 
 export default function SignupPage() {
   return (
@@ -11,6 +12,12 @@ export default function SignupPage() {
         </h1>
       </div>
       <SignupForm />
+      <div className="my-4 flex items-center gap-3">
+        <div className="h-px flex-1 bg-line" />
+        <span className="font-body text-xs text-ink-muted">or</span>
+        <div className="h-px flex-1 bg-line" />
+      </div>
+      <GoogleSignInButton />
       <p className="mt-6 font-body text-sm text-ink-muted">
         Already have an account?{" "}
         <Link href="/login" className="font-medium text-emerald-strong hover:underline">

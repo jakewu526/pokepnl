@@ -69,8 +69,10 @@ export async function login(_state: AuthFormState, formData: FormData): Promise<
   const { email, password } = validatedFields.data;
 
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    return { message: "Invalid email or password." };
+  if (!user || !user.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
+    return user && !user.passwordHash
+      ? { message: "This account uses Google sign-in. Continue with Google below." }
+      : { message: "Invalid email or password." };
   }
 
   await createSession(user.id);
