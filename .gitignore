@@ -47,3 +47,6 @@ next-env.d.ts
 # OS / local artifacts
 desktop.ini
 /Screenshot*.png
+
+# memsearch memory store (local session summaries — do not commit)
+.memsearch/
