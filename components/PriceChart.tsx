@@ -11,6 +11,7 @@ import {
   getAvailableRanges,
   parseLocalDate,
 } from "@/lib/chart-format";
+import { CustomRangeControl } from "./CustomRangeControl";
 import { useAnimatedDomain } from "./useAnimatedDomain";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
@@ -48,6 +49,7 @@ export function PriceChart({
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [range, setRange] = useState<RangeKey | null>(null);
+  const [customRange, setCustomRange] = useState<{ start: string; end: string } | null>(null);
   const lineColor = negative ? "var(--amber)" : "var(--emerald)";
   const priceTextClass = negative ? "text-amber" : "text-emerald-strong";
 
@@ -65,10 +67,17 @@ export function PriceChart({
         : 0,
     [points]
   );
-  const visiblePoints = useMemo(
-    () => filterPointsToRange(points, effectiveRange, maxTs),
-    [points, effectiveRange, maxTs]
-  );
+  const visiblePoints = useMemo(() => {
+    if (customRange) {
+      const startTs = parseLocalDate(customRange.start).getTime();
+      const endTs = parseLocalDate(customRange.end).getTime();
+      return points.filter((p) => {
+        const t = parseLocalDate(p.date).getTime();
+        return t >= startTs && t <= endTs;
+      });
+    }
+    return filterPointsToRange(points, effectiveRange, maxTs);
+  }, [points, effectiveRange, maxTs, customRange]);
 
   // Static domain of the selected range (stable during the zoom animation).
   const view = useMemo(() => {
@@ -323,28 +332,38 @@ export function PriceChart({
         </p>
       )}
 
-      {showRangeControls && available.length >= 2 && (
-        <div className="mt-3 flex flex-wrap gap-1.5 border-t border-line pt-3">
-          {available.map((o) => {
-            const selected = o.key === effectiveRange;
-            return (
-              <button
-                key={o.key}
-                type="button"
-                onClick={() => {
-                  setRange(o.key);
-                  setHoverIndex(null);
-                }}
-                className={`rounded px-2.5 py-1 font-body text-xs font-medium transition ${
-                  selected
-                    ? "bg-ink text-paper"
-                    : "border border-line text-ink-muted hover:bg-paper hover:text-ink"
-                }`}
-              >
-                {o.label}
-              </button>
-            );
-          })}
+      {showRangeControls && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-line pt-3">
+          {available.length >= 2 &&
+            available.map((o) => {
+              const selected = customRange == null && o.key === effectiveRange;
+              return (
+                <button
+                  key={o.key}
+                  type="button"
+                  onClick={() => {
+                    setRange(o.key);
+                    setCustomRange(null);
+                    setHoverIndex(null);
+                  }}
+                  className={`rounded px-2.5 py-1 font-body text-xs font-medium transition ${
+                    selected
+                      ? "bg-ink text-paper"
+                      : "border border-line text-ink-muted hover:bg-paper hover:text-ink"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+
+          <CustomRangeControl
+            isActive={customRange != null}
+            onApply={(range) => {
+              setCustomRange(range);
+              setHoverIndex(null);
+            }}
+          />
         </div>
       )}
 

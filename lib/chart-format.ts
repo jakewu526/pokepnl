@@ -85,3 +85,53 @@ export function formatRangeCaption(minTs: number, maxTs: number): string {
   const end = fullFormatter.format(new Date(maxTs));
   return start === end ? start : `${start} – ${end}`;
 }
+
+// Inverse of parseLocalDate: a Date's local calendar day as "YYYY-MM-DD",
+// matching both PricePoint's date format and <input type="date"> values.
+export function toDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+// Parses a hand-typed "M/D/YYYY" or "MM/DD/YYYY" date into the internal
+// "YYYY-MM-DD" key, or null if it isn't a real calendar date (bad month/day,
+// non-numeric, wrong shape). Rejects rollovers like "02/30/2025" rather than
+// letting `Date` silently normalize them to March 2nd.
+export function parseTypedDate(text: string): string | null {
+  const match = text.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return null;
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const year = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null;
+  }
+  return toDateKey(date);
+}
+
+// Inverse of parseTypedDate, for echoing a calendar-picked date back into the
+// typed field as "MM/DD/YYYY".
+export function formatTypedDate(dateKey: string): string {
+  const [year, month, day] = dateKey.split("-");
+  return `${month}/${day}/${year}`;
+}
+
+// Resolves the two hand-typed range fields into a usable {start, end} pair, or
+// an error message covering every way the input can be unusable: missing,
+// unparsable, in the future, or reversed.
+export function resolveCustomRange(
+  startText: string,
+  endText: string,
+  todayKey: string
+): { start: string; end: string } | { error: string } {
+  if (!startText.trim() || !endText.trim()) return { error: "Enter a start and end date." };
+  const start = parseTypedDate(startText);
+  const end = parseTypedDate(endText);
+  if (!start || !end) return { error: "Enter valid dates (MM/DD/YYYY)." };
+  if (start > todayKey || end > todayKey) return { error: "Dates can't be in the future." };
+  if (start > end) return { error: "Start date must be before end date." };
+  return { start, end };
+}

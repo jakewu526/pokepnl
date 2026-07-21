@@ -11,6 +11,7 @@ import {
   getAvailableRanges,
   parseLocalDate,
 } from "@/lib/chart-format";
+import { CustomRangeControl } from "./CustomRangeControl";
 import { useAnimatedDomain } from "./useAnimatedDomain";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
@@ -52,6 +53,7 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [range, setRange] = useState<RangeKey | null>(null);
+  const [customRange, setCustomRange] = useState<{ start: string; end: string } | null>(null);
 
   // Ranges offered depend on the full history across every grade, so the
   // buttons don't change as grades are hidden/shown.
@@ -67,14 +69,23 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
     [allDates]
   );
 
-  const rangedSeries = useMemo(
-    () =>
-      series.map((s) => ({
+  const rangedSeries = useMemo(() => {
+    if (customRange) {
+      const startTs = parseLocalDate(customRange.start).getTime();
+      const endTs = parseLocalDate(customRange.end).getTime();
+      return series.map((s) => ({
         ...s,
-        history: filterPointsToRange(s.history, effectiveRange, maxTs),
-      })),
-    [series, effectiveRange, maxTs]
-  );
+        history: s.history.filter((p) => {
+          const t = parseLocalDate(p.date).getTime();
+          return t >= startTs && t <= endTs;
+        }),
+      }));
+    }
+    return series.map((s) => ({
+      ...s,
+      history: filterPointsToRange(s.history, effectiveRange, maxTs),
+    }));
+  }, [series, effectiveRange, maxTs, customRange]);
 
   const visibleSeries = rangedSeries.filter((s) => !hidden.has(s.grade));
 
@@ -335,16 +346,17 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
         </p>
       )}
 
-      {available.length >= 2 && (
-        <div className="mt-3 flex flex-wrap gap-1.5 border-t border-line pt-3">
-          {available.map((o) => {
-            const selected = o.key === effectiveRange;
+      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-line pt-3">
+        {available.length >= 2 &&
+          available.map((o) => {
+            const selected = customRange == null && o.key === effectiveRange;
             return (
               <button
                 key={o.key}
                 type="button"
                 onClick={() => {
                   setRange(o.key);
+                  setCustomRange(null);
                   setHoverIndex(null);
                 }}
                 className={`rounded px-2.5 py-1 font-body text-xs font-medium transition ${
@@ -357,8 +369,15 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
               </button>
             );
           })}
-        </div>
-      )}
+
+        <CustomRangeControl
+          isActive={customRange != null}
+          onApply={(range) => {
+            setCustomRange(range);
+            setHoverIndex(null);
+          }}
+        />
+      </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2 border-t border-line pt-3 sm:grid-cols-3">
         {series.map((s) => {
