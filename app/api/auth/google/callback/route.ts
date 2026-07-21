@@ -1,12 +1,12 @@
 import { decodeIdToken } from "arctic";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
-import { getGoogleClient, type GoogleIdTokenClaims } from "@/lib/google-oauth";
+import { getGoogleClient, getGoogleRedirectUri, getRequestOrigin, type GoogleIdTokenClaims } from "@/lib/google-oauth";
 import { prisma } from "@/lib/prisma";
 import { createSession } from "@/lib/session";
 
 function loginError(request: NextRequest, reason: string): NextResponse {
-  return NextResponse.redirect(new URL(`/login?error=${reason}`, request.url));
+  return NextResponse.redirect(new URL(`/login?error=${reason}`, getRequestOrigin(request)));
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return loginError(request, "oauth_failed");
   }
 
-  const google = getGoogleClient();
+  const google = getGoogleClient(getGoogleRedirectUri(request));
   let tokens;
   try {
     tokens = await google.validateAuthorizationCode(code, codeVerifier);
@@ -48,5 +48,5 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   await createSession(user.id);
-  return NextResponse.redirect(new URL("/collection", request.url));
+  return NextResponse.redirect(new URL("/collection", getRequestOrigin(request)));
 }
