@@ -6,12 +6,13 @@ import {
   type RangeKey,
   defaultRangeKey,
   filterPointsToRange,
+  findNearestDateIndex,
   formatAxisDate,
   formatRangeCaption,
   getAvailableRanges,
   parseLocalDate,
 } from "@/lib/chart-format";
-import { CustomRangeControl } from "./CustomRangeControl";
+import { ChartDateControl } from "./ChartDateControl";
 import { useAnimatedDomain } from "./useAnimatedDomain";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
@@ -54,6 +55,7 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [range, setRange] = useState<RangeKey | null>(null);
   const [customRange, setCustomRange] = useState<{ start: string; end: string } | null>(null);
+  const [lookupDate, setLookupDate] = useState<string | null>(null);
 
   // Ranges offered depend on the full history across every grade, so the
   // buttons don't change as grades are hidden/shown.
@@ -69,7 +71,28 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
     [allDates]
   );
 
+  // Resolve a typed lookup date to the nearest actual data point across every
+  // grade (regardless of hidden state), so the centered window and the
+  // pinned dot both key off a real snapshot.
+  const resolvedLookupDate = useMemo(() => {
+    if (!lookupDate) return null;
+    const idx = findNearestDateIndex(allDates, parseLocalDate(lookupDate).getTime());
+    return idx != null ? allDates[idx] : null;
+  }, [lookupDate, allDates]);
+
   const rangedSeries = useMemo(() => {
+    if (resolvedLookupDate) {
+      const centerTs = parseLocalDate(resolvedLookupDate).getTime();
+      const startTs = centerTs - 15 * DAY_MS;
+      const endTs = centerTs + 15 * DAY_MS;
+      return series.map((s) => ({
+        ...s,
+        history: s.history.filter((p) => {
+          const t = parseLocalDate(p.date).getTime();
+          return t >= startTs && t <= endTs;
+        }),
+      }));
+    }
     if (customRange) {
       const startTs = parseLocalDate(customRange.start).getTime();
       const endTs = parseLocalDate(customRange.end).getTime();
@@ -85,7 +108,7 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
       ...s,
       history: filterPointsToRange(s.history, effectiveRange, maxTs),
     }));
-  }, [series, effectiveRange, maxTs, customRange]);
+  }, [series, effectiveRange, maxTs, customRange, resolvedLookupDate]);
 
   const visibleSeries = rangedSeries.filter((s) => !hidden.has(s.grade));
 
@@ -131,6 +154,15 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
     [series, hidden, renderMinDate]
   );
 
+  // Which visible date the lookup date's dot should pin to. Uses nearest (not
+  // exact) match against view.dates so that if the resolved snapshot exists
+  // only on a currently-hidden grade, the pin still lands on the closest
+  // still-visible date instead of disappearing.
+  const pinnedIndex = useMemo(() => {
+    if (!resolvedLookupDate || !view) return null;
+    return findNearestDateIndex(view.dates, parseLocalDate(resolvedLookupDate).getTime());
+  }, [view, resolvedLookupDate]);
+
   if (series.length === 0) {
     return (
       <div className="flex h-[280px] flex-col items-center justify-center gap-1 rounded-card border border-line bg-paper-raised text-center">
@@ -175,8 +207,9 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
       : [];
 
   const canPlot = seriesLines.some((s) => s.coords.length > 1);
+  const activeIndex = hoverIndex ?? pinnedIndex;
   const hoverDate =
-    hoverIndex != null && hoverIndex < visibleDates.length ? visibleDates[hoverIndex] : null;
+    activeIndex != null && activeIndex < visibleDates.length ? visibleDates[activeIndex] : null;
 
   function toggle(grade: string) {
     setHidden((prev) => {
@@ -349,7 +382,7 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
       <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-line pt-3">
         {available.length >= 2 &&
           available.map((o) => {
-            const selected = customRange == null && o.key === effectiveRange;
+            const selected = customRange == null && lookupDate == null && o.key === effectiveRange;
             return (
               <button
                 key={o.key}
@@ -357,6 +390,7 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
                 onClick={() => {
                   setRange(o.key);
                   setCustomRange(null);
+                  setLookupDate(null);
                   setHoverIndex(null);
                 }}
                 className={`rounded px-2.5 py-1 font-body text-xs font-medium transition ${
@@ -370,10 +404,17 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
             );
           })}
 
-        <CustomRangeControl
-          isActive={customRange != null}
-          onApply={(range) => {
-            setCustomRange(range);
+        <ChartDateControl
+          isRangeActive={customRange != null}
+          isDayActive={lookupDate != null}
+          onApply={(result) => {
+            if (result.kind === "range") {
+              setCustomRange(result);
+              setLookupDate(null);
+            } else {
+              setLookupDate(result.date);
+              setCustomRange(null);
+            }
             setHoverIndex(null);
           }}
         />

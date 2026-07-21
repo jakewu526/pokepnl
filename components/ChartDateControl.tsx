@@ -1,7 +1,13 @@
 "use client";
 
 import { type ChangeEvent, type FormEvent, type KeyboardEvent, useMemo, useRef, useState } from "react";
-import { formatTypedDate, parseTypedDate, resolveCustomRange, toDateKey } from "@/lib/chart-format";
+import {
+  formatTypedDate,
+  parseTypedDate,
+  resolveCustomRange,
+  resolveSpecificDate,
+  toDateKey,
+} from "@/lib/chart-format";
 
 function CalendarIcon() {
   return (
@@ -143,19 +149,33 @@ function DateField({
   );
 }
 
-export function CustomRangeControl({
-  isActive,
+type Mode = "range" | "day";
+
+type ApplyResult =
+  | { kind: "range"; start: string; end: string }
+  | { kind: "day"; date: string };
+
+// Toggles between two small forms -- a date range (start/end) and a single
+// day lookup -- so both never clutter the chart controls at once. Both forms
+// share the same DateField building block; only the submit/validate logic
+// and resulting ApplyResult shape differ.
+export function ChartDateControl({
+  isRangeActive,
+  isDayActive,
   onApply,
 }: {
-  isActive: boolean;
-  onApply: (range: { start: string; end: string }) => void;
+  isRangeActive: boolean;
+  isDayActive: boolean;
+  onApply: (result: ApplyResult) => void;
 }) {
+  const [mode, setMode] = useState<Mode>("range");
   const [startText, setStartText] = useState("");
   const [endText, setEndText] = useState("");
+  const [dayText, setDayText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const todayKey = useMemo(() => toDateKey(new Date()), []);
 
-  function handleSubmit(e: FormEvent) {
+  function handleRangeSubmit(e: FormEvent) {
     e.preventDefault();
     const result = resolveCustomRange(startText, endText, todayKey);
     if ("error" in result) {
@@ -163,36 +183,105 @@ export function CustomRangeControl({
       return;
     }
     setError(null);
-    onApply(result);
+    onApply({ kind: "range", ...result });
+  }
+
+  function handleDaySubmit(e: FormEvent) {
+    e.preventDefault();
+    const result = resolveSpecificDate(dayText, todayKey);
+    if ("error" in result) {
+      setError(result.error);
+      return;
+    }
+    setError(null);
+    onApply({ kind: "day", date: result.date });
+  }
+
+  function selectMode(next: Mode) {
+    setMode(next);
+    setError(null);
   }
 
   return (
     <>
-      <form onSubmit={handleSubmit} noValidate className="flex flex-wrap items-center gap-1.5">
-        <DateField
-          label="Custom range start date"
-          value={startText}
-          onChange={setStartText}
-          maxKey={todayKey}
-        />
-        <span className="font-body text-xs text-ink-muted">–</span>
-        <DateField
-          label="Custom range end date"
-          value={endText}
-          onChange={setEndText}
-          maxKey={todayKey}
-        />
+      <div className="inline-flex rounded border border-line p-0.5">
         <button
-          type="submit"
-          className={`rounded px-2.5 py-1 font-body text-xs font-medium transition ${
-            isActive
-              ? "bg-ink text-paper"
-              : "border border-line text-ink-muted hover:bg-paper hover:text-ink"
+          type="button"
+          onClick={() => selectMode("range")}
+          aria-pressed={mode === "range"}
+          className={`rounded px-2 py-0.5 font-body text-xs font-medium transition ${
+            mode === "range" ? "bg-ink text-paper" : "text-ink-muted hover:text-ink"
           }`}
         >
-          Apply
+          Range
         </button>
-      </form>
+        <button
+          type="button"
+          onClick={() => selectMode("day")}
+          aria-pressed={mode === "day"}
+          className={`rounded px-2 py-0.5 font-body text-xs font-medium transition ${
+            mode === "day" ? "bg-ink text-paper" : "text-ink-muted hover:text-ink"
+          }`}
+        >
+          Day
+        </button>
+      </div>
+
+      {mode === "range" ? (
+        <form
+          onSubmit={handleRangeSubmit}
+          noValidate
+          className="flex flex-wrap items-center gap-1.5"
+        >
+          <DateField
+            label="Custom range start date"
+            value={startText}
+            onChange={setStartText}
+            maxKey={todayKey}
+          />
+          <span className="font-body text-xs text-ink-muted">–</span>
+          <DateField
+            label="Custom range end date"
+            value={endText}
+            onChange={setEndText}
+            maxKey={todayKey}
+          />
+          <button
+            type="submit"
+            className={`rounded px-2.5 py-1 font-body text-xs font-medium transition ${
+              isRangeActive
+                ? "bg-ink text-paper"
+                : "border border-line text-ink-muted hover:bg-paper hover:text-ink"
+            }`}
+          >
+            Apply
+          </button>
+        </form>
+      ) : (
+        <form
+          onSubmit={handleDaySubmit}
+          noValidate
+          className="flex flex-wrap items-center gap-1.5"
+        >
+          <DateField
+            label="Specific date lookup"
+            value={dayText}
+            onChange={setDayText}
+            maxKey={todayKey}
+          />
+          <button
+            type="submit"
+            className={`rounded px-2.5 py-1 font-body text-xs font-medium transition ${
+              isDayActive
+                ? "bg-ink text-paper"
+                : "border border-line text-ink-muted hover:bg-paper hover:text-ink"
+            }`}
+          >
+            Find
+          </button>
+        </form>
+      )}
+
       {error && <p className="mt-1.5 basis-full font-body text-xs text-amber">{error}</p>}
     </>
   );

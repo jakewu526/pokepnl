@@ -6,12 +6,13 @@ import {
   type RangeKey,
   defaultRangeKey,
   filterPointsToRange,
+  findNearestDateIndex,
   formatAxisDate,
   formatRangeCaption,
   getAvailableRanges,
   parseLocalDate,
 } from "@/lib/chart-format";
-import { CustomRangeControl } from "./CustomRangeControl";
+import { ChartDateControl } from "./ChartDateControl";
 import { useAnimatedDomain } from "./useAnimatedDomain";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
@@ -50,6 +51,7 @@ export function PriceChart({
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [range, setRange] = useState<RangeKey | null>(null);
   const [customRange, setCustomRange] = useState<{ start: string; end: string } | null>(null);
+  const [lookupDate, setLookupDate] = useState<string | null>(null);
   const lineColor = negative ? "var(--amber)" : "var(--emerald)";
   const priceTextClass = negative ? "text-amber" : "text-emerald-strong";
 
@@ -67,7 +69,28 @@ export function PriceChart({
         : 0,
     [points]
   );
+  // Resolve a typed lookup date to the nearest actual data point up front, so
+  // the centered window and the pinned dot both key off a real snapshot
+  // rather than a date that may have no data at all.
+  const resolvedLookupDate = useMemo(() => {
+    if (!lookupDate) return null;
+    const idx = findNearestDateIndex(
+      points.map((p) => p.date),
+      parseLocalDate(lookupDate).getTime()
+    );
+    return idx != null ? points[idx].date : null;
+  }, [lookupDate, points]);
+
   const visiblePoints = useMemo(() => {
+    if (resolvedLookupDate) {
+      const centerTs = parseLocalDate(resolvedLookupDate).getTime();
+      const startTs = centerTs - 15 * DAY_MS;
+      const endTs = centerTs + 15 * DAY_MS;
+      return points.filter((p) => {
+        const t = parseLocalDate(p.date).getTime();
+        return t >= startTs && t <= endTs;
+      });
+    }
     if (customRange) {
       const startTs = parseLocalDate(customRange.start).getTime();
       const endTs = parseLocalDate(customRange.end).getTime();
@@ -77,7 +100,7 @@ export function PriceChart({
       });
     }
     return filterPointsToRange(points, effectiveRange, maxTs);
-  }, [points, effectiveRange, maxTs, customRange]);
+  }, [points, effectiveRange, maxTs, customRange, resolvedLookupDate]);
 
   // Static domain of the selected range (stable during the zoom animation).
   const view = useMemo(() => {
@@ -127,6 +150,17 @@ export function PriceChart({
     () => points.filter((p) => parseLocalDate(p.date).getTime() >= renderMinDate),
     [points, renderMinDate]
   );
+
+  // Which rendered point the lookup date's dot should pin to. Always resolves
+  // to an exact match, since resolvedLookupDate is itself a real point's date
+  // and the render window is centered on it.
+  const pinnedIndex = useMemo(() => {
+    if (!resolvedLookupDate) return null;
+    return findNearestDateIndex(
+      renderPoints.map((p) => p.date),
+      parseLocalDate(resolvedLookupDate).getTime()
+    );
+  }, [renderPoints, resolvedLookupDate]);
 
   if (points.length === 0) {
     return (
@@ -191,7 +225,8 @@ export function PriceChart({
 
   const canPlot = view != null && visiblePoints.length > 1;
   const pathD = coords.map((c, i) => `${i === 0 ? "M" : "L"} ${c.x} ${c.y}`).join(" ");
-  const hovered = hoverIndex != null && hoverIndex < coords.length ? coords[hoverIndex] : null;
+  const activeIndex = hoverIndex ?? pinnedIndex;
+  const hovered = activeIndex != null && activeIndex < coords.length ? coords[activeIndex] : null;
 
   function handleMove(clientX: number) {
     const el = containerRef.current;
@@ -336,7 +371,7 @@ export function PriceChart({
         <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-line pt-3">
           {available.length >= 2 &&
             available.map((o) => {
-              const selected = customRange == null && o.key === effectiveRange;
+              const selected = customRange == null && lookupDate == null && o.key === effectiveRange;
               return (
                 <button
                   key={o.key}
@@ -344,6 +379,7 @@ export function PriceChart({
                   onClick={() => {
                     setRange(o.key);
                     setCustomRange(null);
+                    setLookupDate(null);
                     setHoverIndex(null);
                   }}
                   className={`rounded px-2.5 py-1 font-body text-xs font-medium transition ${
@@ -357,10 +393,17 @@ export function PriceChart({
               );
             })}
 
-          <CustomRangeControl
-            isActive={customRange != null}
-            onApply={(range) => {
-              setCustomRange(range);
+          <ChartDateControl
+            isRangeActive={customRange != null}
+            isDayActive={lookupDate != null}
+            onApply={(result) => {
+              if (result.kind === "range") {
+                setCustomRange(result);
+                setLookupDate(null);
+              } else {
+                setLookupDate(result.date);
+                setCustomRange(null);
+              }
               setHoverIndex(null);
             }}
           />

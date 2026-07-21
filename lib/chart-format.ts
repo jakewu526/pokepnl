@@ -135,3 +135,33 @@ export function resolveCustomRange(
   if (start > end) return { error: "Start date must be before end date." };
   return { start, end };
 }
+
+// Mirrors resolveCustomRange but for a single hand-typed date (no ordering check).
+export function resolveSpecificDate(
+  text: string,
+  todayKey: string
+): { date: string } | { error: string } {
+  if (!text.trim()) return { error: "Enter a date." };
+  const date = parseTypedDate(text);
+  if (!date) return { error: "Enter a valid date (MM/DD/YYYY)." };
+  if (date > todayKey) return { error: "Date can't be in the future." };
+  return { date };
+}
+
+// Index of the date in `dates` nearest to `targetTs` (by absolute day
+// distance), or null if `dates` is empty. Used both to snap a raw typed date
+// to a real data point, and to re-locate that resolved date inside a
+// filtered/visible subset (e.g. after hiding a grade).
+export function findNearestDateIndex(dates: string[], targetTs: number): number | null {
+  if (dates.length === 0) return null;
+  let nearestIndex = 0;
+  let nearestDist = Infinity;
+  dates.forEach((d, i) => {
+    const dist = Math.abs(parseLocalDate(d).getTime() - targetTs);
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      nearestIndex = i;
+    }
+  });
+  return nearestIndex;
+}
