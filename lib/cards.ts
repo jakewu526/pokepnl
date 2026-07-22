@@ -30,10 +30,41 @@ export async function getCatalogStats(): Promise<{ cardCount: number; setCount: 
   return { cardCount, setCount };
 }
 
+// Subtypes (e.g. "GX", "VMAX", "Basic", "Stage 1") come from pokemontcg.io
+// with inconsistent casing, and Prisma's array `has`/`hasSome` only match
+// exact strings -- so try the token as typed plus the two casings actually
+// used in the data instead of a case-insensitive contains.
+function subtypeVariants(token: string): string[] {
+  const upper = token.toUpperCase();
+  const capitalized = token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+  return Array.from(new Set([token, upper, capitalized]));
+}
+
+// Splits the query into whitespace-separated tokens and requires every token
+// to match at least one searchable field (name, number, rarity, card type,
+// or set name/series), so e.g. "base charizard" finds Charizard cards from
+// any set whose name/series contains "base".
+function buildCardSearchWhere(query: string) {
+  const tokens = query.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return {};
+
+  return {
+    AND: tokens.map((token) => ({
+      OR: [
+        { name: { contains: token, mode: "insensitive" as const } },
+        { number: { contains: token, mode: "insensitive" as const } },
+        { rarity: { contains: token, mode: "insensitive" as const } },
+        { supertype: { contains: token, mode: "insensitive" as const } },
+        { subtypes: { hasSome: subtypeVariants(token) } },
+        { set: { name: { contains: token, mode: "insensitive" as const } } },
+        { set: { series: { contains: token, mode: "insensitive" as const } } },
+      ],
+    })),
+  };
+}
+
 export async function searchCards(query: string, page: number): Promise<CardSearchResult> {
-  const where = query.trim()
-    ? { name: { contains: query.trim(), mode: "insensitive" as const } }
-    : {};
+  const where = buildCardSearchWhere(query);
 
   const [total, cards] = await Promise.all([
     prisma.card.count({ where }),
@@ -74,6 +105,64 @@ export async function searchCards(query: string, page: number): Promise<CardSear
       };
     }),
   };
+}
+
+export type CardSuggestion = {
+  id: string;
+  name: string;
+  number: string;
+  rarity: string | null;
+  imageUrl: string | null;
+  setName: string;
+  setTotal: number | null;
+};
+
+export const SUGGESTION_LIMIT = 8;
+
+// Lightweight, unpaginated lookup for the search bar's autocomplete dropdown.
+// Over-fetches on the same multi-field match as searchCards, then re-ranks
+// so exact/prefix name (or exact number) matches surface above looser hits
+// on set name, rarity, or card type.
+export async function getCardSuggestions(query: string): Promise<CardSuggestion[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const candidates = await prisma.card.findMany({
+    where: buildCardSearchWhere(trimmed),
+    orderBy: [{ name: "asc" }, { number: "asc" }],
+    take: SUGGESTION_LIMIT * 4,
+    select: {
+      id: true,
+      name: true,
+      number: true,
+      rarity: true,
+      imageUrl: true,
+      set: { select: { name: true, totalCards: true } },
+    },
+  });
+
+  const lowerQuery = trimmed.toLowerCase();
+  const rank = (c: (typeof candidates)[number]) => {
+    const lowerName = c.name.toLowerCase();
+    if (lowerName === lowerQuery) return 0;
+    if (lowerName.startsWith(lowerQuery)) return 1;
+    if (c.number.toLowerCase() === lowerQuery) return 2;
+    return 3;
+  };
+
+  return candidates
+    .slice()
+    .sort((a, b) => rank(a) - rank(b))
+    .slice(0, SUGGESTION_LIMIT)
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      number: c.number,
+      rarity: c.rarity,
+      imageUrl: c.imageUrl,
+      setName: c.set.name,
+      setTotal: c.set.totalCards,
+    }));
 }
 
 export type PricePoint = { date: string; price: number };
