@@ -96,6 +96,16 @@ async function captureCardPrices(cardId: string, card: PokemonTcgCard): Promise<
   }
 }
 
+// New sets occasionally ship from the API with raw enum-style rarity strings
+// (e.g. "MEGA_ATTACK_RARE" for Ascended Heroes) before they're cleaned up
+// upstream. Normalize those to the Title Case format every other rarity uses.
+function normalizeRarity(rarity?: string): string | undefined {
+  if (rarity && /^[A-Z0-9]+(_[A-Z0-9]+)+$/.test(rarity)) {
+    return rarity.split("_").map((word) => word[0] + word.slice(1).toLowerCase()).join(" ");
+  }
+  return rarity;
+}
+
 function apiHeaders(): HeadersInit {
   const apiKey = process.env.POKEMONTCG_API_KEY;
   return apiKey ? { "X-Api-Key": apiKey } : {};
@@ -178,14 +188,14 @@ async function ingestCards(): Promise<void> {
           setId: set.id,
           number: card.number,
           name: card.name,
-          rarity: card.rarity,
+          rarity: normalizeRarity(card.rarity),
           supertype: card.supertype,
           subtypes: card.subtypes ?? [],
           imageUrl: card.images?.large ?? card.images?.small,
         },
         update: {
           name: card.name,
-          rarity: card.rarity,
+          rarity: normalizeRarity(card.rarity),
           supertype: card.supertype,
           subtypes: card.subtypes ?? [],
           imageUrl: card.images?.large ?? card.images?.small,
