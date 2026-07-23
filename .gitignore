@@ -50,3 +50,6 @@ desktop.ini
 
 # memsearch memory store (local session summaries — do not commit)
 .memsearch/
+
+# daily price-sync task logs
+/logs/
