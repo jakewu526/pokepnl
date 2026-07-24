@@ -11,5 +11,18 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  postgres-uat:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pokemon
+      POSTGRES_PASSWORD: ${POSTGRES_UAT_PASSWORD}
+      POSTGRES_DB: pokemon_tcg_uat
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_uat_data:/var/lib/postgresql/data
+
 volumes:
   postgres_data:
+  postgres_uat_data:
