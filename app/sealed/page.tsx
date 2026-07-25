@@ -7,7 +7,6 @@ import { SealedProductTile } from "@/components/SealedProductTile";
 import { SealedPagination } from "@/components/SealedPagination";
 import { AuthNav } from "@/components/AuthNav";
 import { CatalogNav } from "@/components/CatalogNav";
-import { EnvBadge } from "@/components/EnvBadge";
 
 export default async function SealedPage({
   searchParams,
@@ -41,7 +40,6 @@ export default async function SealedPage({
               <h1 className="font-display text-2xl font-semibold tracking-tight text-ink">
                 Binder
               </h1>
-              <EnvBadge />
             </div>
             <div className="flex items-center gap-4">
               <p className="hidden font-data text-xs text-ink-muted sm:block">

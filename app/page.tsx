@@ -10,7 +10,6 @@ import { CatalogViewToggle, type CatalogView } from "@/components/CatalogViewTog
 import { Pagination } from "@/components/Pagination";
 import { AuthNav } from "@/components/AuthNav";
 import { CatalogNav } from "@/components/CatalogNav";
-import { EnvBadge } from "@/components/EnvBadge";
 
 export default async function Home({
   searchParams,
@@ -49,7 +48,11 @@ export default async function Home({
               <h1 className="font-display text-2xl font-semibold tracking-tight text-ink">
                 Binder
               </h1>
-              <EnvBadge />
+              {process.env.NEXT_PUBLIC_APP_ENV === "uat" && (
+                <span className="rounded-full bg-amber-tint px-2 py-0.5 font-body text-[11px] font-medium text-amber">
+                  UAT
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-4">
               <p className="hidden font-data text-xs text-ink-muted sm:block">
