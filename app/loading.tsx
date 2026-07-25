@@ -1,3 +1,5 @@
+import { EnvBadge } from "@/components/EnvBadge";
+
 export default function Loading() {
   return (
     <div className="flex min-h-full flex-col">
@@ -8,6 +10,7 @@ export default function Loading() {
             <h1 className="font-display text-2xl font-semibold tracking-tight text-ink">
               Binder
             </h1>
+            <EnvBadge />
           </div>
           <div className="h-12 animate-pulse rounded-full border border-line bg-paper-raised" />
         </div>
