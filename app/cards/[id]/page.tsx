@@ -1,6 +1,6 @@
 import Image from "next/image";
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BackLink } from "@/components/BackLink";
 import { getCardDetail, getCardGradeHistories, getCardReverseHoloHistory } from "@/lib/cards";
 import { getWatchlistedCardIds } from "@/lib/watchlist";
 import { getCurrentUser } from "@/lib/dal";
@@ -46,12 +46,12 @@ export default async function CardDetailPage({
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-10 border-b border-line bg-paper/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-5 sm:px-6">
-          <Link
-            href="/"
+          <BackLink
+            fallbackHref="/"
             className="font-body text-sm font-medium text-emerald-strong hover:underline"
           >
             ← Binder
-          </Link>
+          </BackLink>
           <div className="flex items-center gap-4">
             <Suspense fallback={null}>
               <AuthNav />
