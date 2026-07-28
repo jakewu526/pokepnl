@@ -165,21 +165,27 @@ enum PriceType {
   DIRECT_LOW
 }
 
+enum PrintVariant {
+  NORMAL
+  REVERSE_HOLO
+}
+
 model PriceSnapshot {
-  id              String    @id @default(cuid())
+  id              String       @id @default(cuid())
   cardId          String?
   sealedProductId String?
   source          PriceSource
   priceType       PriceType
   condition       String?
-  price           Decimal   @db.Decimal(10, 2)
-  capturedAt      DateTime  @default(now())
-  capturedDate    DateTime  @default(now()) @db.Date
+  variant         PrintVariant @default(NORMAL)
+  price           Decimal      @db.Decimal(10, 2)
+  capturedAt      DateTime     @default(now())
+  capturedDate    DateTime     @default(now()) @db.Date
 
   card          Card?          @relation(fields: [cardId], references: [id])
   sealedProduct SealedProduct? @relation(fields: [sealedProductId], references: [id])
 
-  @@unique([cardId, sealedProductId, source, priceType, condition, capturedDate])
+  @@unique([cardId, sealedProductId, source, priceType, condition, variant, capturedDate])
   @@index([cardId, capturedAt])
   @@index([sealedProductId, capturedAt])
 }

@@ -67,6 +67,7 @@ async function captureCardPrices(cardId: string, card: PokemonTcgCard): Promise<
         source: "TCGPLAYER",
         priceType,
         condition: variant,
+        variant: variant === "reverseHolofoil" ? "REVERSE_HOLO" : "NORMAL",
         price,
         capturedAt,
       });
@@ -75,13 +76,13 @@ async function captureCardPrices(cardId: string, card: PokemonTcgCard): Promise<
 
   const cardmarket = card.cardmarket?.prices;
   if (cardmarket) {
-    const entries: [number | undefined, "MARKET" | "LOW", string][] = [
-      [cardmarket.trendPrice, "MARKET", "normal"],
-      [cardmarket.lowPrice, "LOW", "normal"],
-      [cardmarket.reverseHoloTrend, "MARKET", "reverseHolo"],
-      [cardmarket.reverseHoloLow, "LOW", "reverseHolo"],
+    const entries: [number | undefined, "MARKET" | "LOW", string, "NORMAL" | "REVERSE_HOLO"][] = [
+      [cardmarket.trendPrice, "MARKET", "normal", "NORMAL"],
+      [cardmarket.lowPrice, "LOW", "normal", "NORMAL"],
+      [cardmarket.reverseHoloTrend, "MARKET", "reverseHolo", "REVERSE_HOLO"],
+      [cardmarket.reverseHoloLow, "LOW", "reverseHolo", "REVERSE_HOLO"],
     ];
-    for (const [price, priceType, condition] of entries) {
+    for (const [price, priceType, condition, priceVariant] of entries) {
       if (price == null) continue;
       await capturePriceSnapshot({
         entityId: cardId,
@@ -89,6 +90,7 @@ async function captureCardPrices(cardId: string, card: PokemonTcgCard): Promise<
         source: "CARDMARKET",
         priceType,
         condition,
+        variant: priceVariant,
         price,
         capturedAt,
       });

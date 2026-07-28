@@ -209,7 +209,7 @@ export async function getCardDetail(id: string): Promise<CardDetail | null> {
   const rows = await prisma.$queryRaw<HistoryRow[]>`
     SELECT source, condition, price::text AS price, "capturedDate"
     FROM "PriceSnapshot"
-    WHERE "cardId" = ${id} AND "priceType" = 'MARKET'
+    WHERE "cardId" = ${id} AND "priceType" = 'MARKET' AND variant = 'NORMAL'
       AND source IN ('PRICECHARTING', 'TCGPLAYER', 'CARDMARKET')
     ORDER BY "capturedDate" ASC
   `;
@@ -273,7 +273,7 @@ export async function getLatestPrices(
   const rows = await prisma.$queryRaw<LatestPriceRow[]>`
     SELECT DISTINCT ON ("cardId", source) "cardId", source, price::text AS price
     FROM "PriceSnapshot"
-    WHERE "cardId" = ANY(${cardIds}) AND "priceType" = 'MARKET'
+    WHERE "cardId" = ANY(${cardIds}) AND "priceType" = 'MARKET' AND variant = 'NORMAL'
     ORDER BY "cardId", source, "capturedDate" DESC
   `;
 
@@ -328,4 +328,41 @@ export async function getCardGradeHistories(cardId: string): Promise<GradePriceS
     const history = densifyHistory(raw, `${cardId}:${grade}`);
     return { grade, history, currentPrice: raw[raw.length - 1]?.price ?? null };
   });
+}
+
+export type CardVariantHistory = {
+  history: PricePoint[];
+  source: "TCGPLAYER" | "CARDMARKET";
+};
+
+type VariantHistoryRow = { source: "TCGPLAYER" | "CARDMARKET"; condition: string | null; price: string; capturedDate: Date };
+
+// Mirrors getCardDetail's single-series picking logic (prefer the most
+// recently captured source, TCGplayer over Cardmarket on ties) but scoped to
+// reverse-holo rows. PriceCharting never writes REVERSE_HOLO snapshots, so
+// only TCGPLAYER/CARDMARKET are considered.
+export async function getCardReverseHoloHistory(cardId: string): Promise<CardVariantHistory | null> {
+  const rows = await prisma.$queryRaw<VariantHistoryRow[]>`
+    SELECT source, condition, price::text AS price, "capturedDate"
+    FROM "PriceSnapshot"
+    WHERE "cardId" = ${cardId} AND "priceType" = 'MARKET' AND variant = 'REVERSE_HOLO'
+      AND source IN ('TCGPLAYER', 'CARDMARKET')
+    ORDER BY "capturedDate" ASC
+  `;
+  if (rows.length === 0) return null;
+
+  const last = rows[rows.length - 1];
+  const lastDateKey = last.capturedDate.toISOString().slice(0, 10);
+  const lastDayRows = rows.filter((r) => r.capturedDate.toISOString().slice(0, 10) === lastDateKey);
+  const chosen = lastDayRows.find((r) => r.source === "TCGPLAYER") ?? last;
+
+  let history = rows
+    .filter((r) => r.source === chosen.source && r.condition === chosen.condition)
+    .map((r) => ({
+      date: r.capturedDate.toISOString().slice(0, 10),
+      price: parseFloat(r.price),
+    }));
+  history = densifyHistory(history, `${cardId}:REVERSE_HOLO`);
+
+  return { history, source: chosen.source };
 }

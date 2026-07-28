@@ -1,12 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getCardDetail, getCardGradeHistories } from "@/lib/cards";
+import { getCardDetail, getCardGradeHistories, getCardReverseHoloHistory } from "@/lib/cards";
 import { getWatchlistedCardIds } from "@/lib/watchlist";
 import { getCurrentUser } from "@/lib/dal";
 import { Suspense } from "react";
-import { PriceChart } from "@/components/PriceChart";
 import { GradePriceChart } from "@/components/GradePriceChart";
+import { CardPriceHistory } from "@/components/CardPriceHistory";
 import { AuthNav } from "@/components/AuthNav";
 import { AddToCollectionButton } from "@/components/AddToCollectionButton";
 import { WatchlistHeartButton } from "@/components/WatchlistHeartButton";
@@ -30,7 +30,11 @@ export default async function CardDetailPage({
   const { id } = await params;
   const card = await getCardDetail(id);
   if (!card) notFound();
-  const [gradeHistories, user] = await Promise.all([getCardGradeHistories(id), getCurrentUser()]);
+  const [gradeHistories, reverseHoloHistory, user] = await Promise.all([
+    getCardGradeHistories(id),
+    getCardReverseHoloHistory(id),
+    getCurrentUser(),
+  ]);
   const watchedIds = user ? await getWatchlistedCardIds(user.id, [id]) : new Set<string>();
   // More than one series means real graded-tier data exists (PSA-style
   // Grade 7 through Grade 10, not just the single Ungraded/raw price) --
@@ -128,7 +132,10 @@ export default async function CardDetailPage({
               {hasGradeData ? (
                 <GradePriceChart series={gradeHistories} />
               ) : (
-                <PriceChart points={card.history} source={card.priceSource} showRangeControls />
+                <CardPriceHistory
+                  normal={{ points: card.history, source: card.priceSource }}
+                  reverseHolo={reverseHoloHistory ? { points: reverseHoloHistory.history, source: reverseHoloHistory.source } : null}
+                />
               )}
             </div>
           </div>

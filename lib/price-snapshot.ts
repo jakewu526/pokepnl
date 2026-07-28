@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 
 export type PriceSourceName = "TCGPLAYER" | "CARDMARKET" | "PRICECHARTING" | "EBAY";
 export type PriceTypeName = "MARKET" | "LOW" | "MID" | "HIGH" | "DIRECT_LOW";
+export type PrintVariantName = "NORMAL" | "REVERSE_HOLO";
 
 export async function capturePriceSnapshot(params: {
   entityId: string;
@@ -9,6 +10,7 @@ export async function capturePriceSnapshot(params: {
   source: PriceSourceName;
   priceType: PriceTypeName;
   condition: string | null;
+  variant?: PrintVariantName;
   price: number;
   capturedAt?: Date;
 }): Promise<void> {
@@ -17,6 +19,7 @@ export async function capturePriceSnapshot(params: {
   const capturedAt = params.capturedAt ?? new Date();
   const cardId = params.entityField === "cardId" ? params.entityId : null;
   const sealedProductId = params.entityField === "sealedProductId" ? params.entityId : null;
+  const variant = params.variant ?? "NORMAL";
 
   // Prisma's typed compound-unique `where` rejects `null` for a component
   // field even though cardId/sealedProductId are nullable columns, so we
@@ -28,6 +31,7 @@ export async function capturePriceSnapshot(params: {
       source: params.source,
       priceType: params.priceType,
       condition: params.condition,
+      variant,
       capturedDate: capturedAt,
     },
     select: { id: true },
@@ -45,6 +49,7 @@ export async function capturePriceSnapshot(params: {
         source: params.source,
         priceType: params.priceType,
         condition: params.condition,
+        variant,
         price: params.price,
         capturedAt,
         capturedDate: capturedAt,
