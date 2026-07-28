@@ -188,4 +188,5 @@ model PriceSnapshot {
   @@unique([cardId, sealedProductId, source, priceType, condition, variant, capturedDate])
   @@index([cardId, capturedAt])
   @@index([sealedProductId, capturedAt])
+  @@index([cardId, priceType, variant, source, capturedDate])
 }

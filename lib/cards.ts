@@ -270,11 +270,21 @@ export async function getLatestPrices(
 
   // Latest MARKET-type snapshot per (card, source); prefer PriceCharting,
   // then TCGplayer, then Cardmarket when multiple are available for a card.
+  // Read via a LATERAL join per source (backed by
+  // [cardId, priceType, variant, source, capturedDate]) rather than
+  // DISTINCT ON, which has to scan every historical snapshot for these
+  // cards instead of seeking straight to each card+source's latest row.
   const rows = await prisma.$queryRaw<LatestPriceRow[]>`
-    SELECT DISTINCT ON ("cardId", source) "cardId", source, price::text AS price
-    FROM "PriceSnapshot"
-    WHERE "cardId" = ANY(${cardIds}) AND "priceType" = 'MARKET' AND variant = 'NORMAL'
-    ORDER BY "cardId", source, "capturedDate" DESC
+    SELECT c.id AS "cardId", s.source, src.price::text AS price
+    FROM unnest(${cardIds}::text[]) AS c(id)
+    CROSS JOIN LATERAL (VALUES ('PRICECHARTING'), ('TCGPLAYER'), ('CARDMARKET')) AS s(source)
+    CROSS JOIN LATERAL (
+      SELECT ps.price
+      FROM "PriceSnapshot" ps
+      WHERE ps."cardId" = c.id AND ps."priceType" = 'MARKET' AND ps.variant = 'NORMAL' AND ps.source = s.source::"PriceSource"
+      ORDER BY ps."capturedDate" DESC
+      LIMIT 1
+    ) src
   `;
 
   const sourceRank: Record<string, number> = { PRICECHARTING: 0, TCGPLAYER: 1, CARDMARKET: 2 };

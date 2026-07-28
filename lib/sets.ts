@@ -37,20 +37,31 @@ async function getSetPrices(setIds: string[]): Promise<Map<string, number>> {
 
   // One market price per card (preferring PriceCharting, then TCGplayer,
   // then Cardmarket -- same cascade as getLatestPrices in lib/cards.ts),
-  // summed per set to approximate the cost of a complete raw set.
+  // summed per set to approximate the cost of a complete raw set. Each
+  // source is its own LATERAL join so it's a single index seek against
+  // [cardId, priceType, variant, source, capturedDate] (the row is already
+  // last-in-order for that group) instead of scanning + sorting every
+  // historical snapshot across all sources per card.
   const rows = await prisma.$queryRaw<SetPriceRow[]>`
-    WITH best AS (
-      SELECT DISTINCT ON (ps."cardId") ps."cardId", c."setId" AS "setId", ps.price
-      FROM "PriceSnapshot" ps
-      JOIN "Card" c ON c.id = ps."cardId"
-      WHERE ps."priceType" = 'MARKET' AND ps."cardId" IS NOT NULL AND c."setId" = ANY(${setIds})
-      ORDER BY ps."cardId",
-        CASE ps.source WHEN 'PRICECHARTING' THEN 0 WHEN 'TCGPLAYER' THEN 1 ELSE 2 END,
-        ps."capturedDate" DESC
-    )
-    SELECT "setId", SUM(price)::text AS total
-    FROM best
-    GROUP BY "setId"
+    SELECT c."setId" AS "setId", SUM(COALESCE(pc.price, tcg.price, cm.price))::text AS total
+    FROM "Card" c
+    LEFT JOIN LATERAL (
+      SELECT price FROM "PriceSnapshot"
+      WHERE "cardId" = c.id AND "priceType" = 'MARKET' AND variant = 'NORMAL' AND source = 'PRICECHARTING'
+      ORDER BY "capturedDate" DESC LIMIT 1
+    ) pc ON true
+    LEFT JOIN LATERAL (
+      SELECT price FROM "PriceSnapshot"
+      WHERE "cardId" = c.id AND "priceType" = 'MARKET' AND variant = 'NORMAL' AND source = 'TCGPLAYER'
+      ORDER BY "capturedDate" DESC LIMIT 1
+    ) tcg ON true
+    LEFT JOIN LATERAL (
+      SELECT price FROM "PriceSnapshot"
+      WHERE "cardId" = c.id AND "priceType" = 'MARKET' AND variant = 'NORMAL' AND source = 'CARDMARKET'
+      ORDER BY "capturedDate" DESC LIMIT 1
+    ) cm ON true
+    WHERE c."setId" = ANY(${setIds})
+    GROUP BY c."setId"
   `;
 
   return new Map(rows.map((r) => [r.setId, parseFloat(r.total)]));
