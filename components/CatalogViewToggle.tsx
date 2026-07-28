@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useState, useTransition } from "react";
 
 const VIEWS = [
   { key: "singles", label: "Singles" },
@@ -13,8 +14,14 @@ export function CatalogViewToggle({ view }: { view: CatalogView }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
+  const [optimisticView, setOptimisticView] = useState<CatalogView>(view);
+
+  const activeView = isPending ? optimisticView : view;
 
   function select(next: CatalogView) {
+    if (next === activeView) return;
+    setOptimisticView(next);
     const params = new URLSearchParams(searchParams.toString());
     if (next === "singles") {
       params.delete("view");
@@ -22,7 +29,9 @@ export function CatalogViewToggle({ view }: { view: CatalogView }) {
       params.set("view", next);
     }
     params.delete("page");
-    router.push(params.size > 0 ? `${pathname}?${params.toString()}` : pathname);
+    startTransition(() => {
+      router.push(params.size > 0 ? `${pathname}?${params.toString()}` : pathname);
+    });
   }
 
   return (
@@ -36,9 +45,9 @@ export function CatalogViewToggle({ view }: { view: CatalogView }) {
           key={v.key}
           type="button"
           onClick={() => select(v.key)}
-          aria-pressed={view === v.key}
+          aria-pressed={activeView === v.key}
           className={`rounded-full px-4 py-1.5 font-body text-sm font-medium transition-colors ${
-            view === v.key
+            activeView === v.key
               ? "bg-emerald text-paper-raised"
               : "bg-paper-raised text-ink-muted hover:text-ink"
           }`}

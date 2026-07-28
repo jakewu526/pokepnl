@@ -26,6 +26,7 @@ export function SearchBar({ initialQuery }: { initialQuery: string }) {
   const suggestDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const isFirstRender = useRef(true);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const dropdownOpen = focused && suggestions.length > 0;
 
@@ -49,6 +50,7 @@ export function SearchBar({ initialQuery }: { initialQuery: string }) {
     setSuggestions([]);
     setActiveIndex(-1);
     setFocused(false);
+    inputRef.current?.blur();
     router.push(`/cards/${card.id}`);
   }
 
@@ -107,6 +109,7 @@ export function SearchBar({ initialQuery }: { initialQuery: string }) {
         if (debounceRef.current) clearTimeout(debounceRef.current);
         setSuggestions([]);
         setActiveIndex(-1);
+        inputRef.current?.blur();
         navigate(value);
       }}
     >
@@ -123,6 +126,7 @@ export function SearchBar({ initialQuery }: { initialQuery: string }) {
         <path d="M18 18l-4.35-4.35" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
       </svg>
       <input
+        ref={inputRef}
         id="card-search"
         type="search"
         inputMode="search"
