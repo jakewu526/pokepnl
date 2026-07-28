@@ -7,6 +7,7 @@ import {
   matchSetConsole,
   isSealedGenre,
   isForeignConsole,
+  isJapaneseConsole,
   tightNormalize,
   resolveOrCreateSet,
   firstErrorLine,
@@ -154,7 +155,7 @@ async function main() {
   for (const [key, entry] of index) {
     if (claimedKeys.has(key)) continue;
     if (key === tightNormalize(FLAT_PROMO_CONSOLE)) continue;
-    if (isForeignConsole(entry.consoleName)) continue;
+    if (isForeignConsole(entry.consoleName) && !isJapaneseConsole(entry.consoleName)) continue;
 
     const byType = pickBestPerType(entry.rows);
     if (byType.size === 0) continue;

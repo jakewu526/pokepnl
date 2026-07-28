@@ -78,6 +78,14 @@ export function isForeignConsole(consoleName: string): boolean {
   return /\b(japanese|chinese|korean)\b/i.test(consoleName);
 }
 
+// Japanese product is still "foreign" per isForeignConsole above (used to
+// gate matching against English CardSets), but callers that specifically
+// want to let Japanese rows through -- while continuing to exclude Chinese/
+// Korean -- use this instead.
+export function isJapaneseConsole(consoleName: string): boolean {
+  return /\bjapanese\b/i.test(consoleName);
+}
+
 // Tight, punctuation/diacritic/whitespace-insensitive key for matching our
 // CardSet.name against PriceCharting's console-name -- e.g. "HS—Unleashed"
 // and "Unleashed" both normalize to "unleashed". Word-order differences
@@ -135,7 +143,7 @@ export type ConsoleIndex = Map<string, { consoleName: string; rows: PriceGuideRo
 export function buildConsoleIndex(rows: PriceGuideRow[]): ConsoleIndex {
   const index: ConsoleIndex = new Map();
   for (const row of rows) {
-    if (isForeignConsole(row.consoleName)) continue;
+    if (isForeignConsole(row.consoleName) && !isJapaneseConsole(row.consoleName)) continue;
     const key = tightNormalize(row.consoleName);
     let entry = index.get(key);
     if (!entry) {

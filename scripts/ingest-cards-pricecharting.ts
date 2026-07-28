@@ -9,6 +9,7 @@ import {
   normalizeNumber,
   isEnglishCardGenre,
   isForeignConsole,
+  isJapaneseConsole,
   tightNormalize,
   resolveOrCreateSet,
   firstErrorLine,
@@ -202,7 +203,7 @@ async function main() {
   for (const [key, entry] of index) {
     if (claimedKeys.has(key)) continue;
     if (key === tightNormalize(FLAT_PROMO_CONSOLE)) continue;
-    if (isForeignConsole(entry.consoleName)) continue;
+    if (isForeignConsole(entry.consoleName) && !isJapaneseConsole(entry.consoleName)) continue;
     if (!entry.rows.some((r) => isEnglishCardGenre(r.genre))) continue;
 
     const { id, created } = await resolveOrCreateSet(entry.consoleName);
