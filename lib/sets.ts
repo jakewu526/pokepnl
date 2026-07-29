@@ -29,6 +29,15 @@ export type EraGroup = {
   sets: SetListItem[];
 };
 
+export type SetSearchResult = {
+  eras: EraGroup[];
+  total: number;
+  page: number;
+  pageCount: number;
+};
+
+export const SETS_PAGE_SIZE = 48;
+
 type SetPriceRow = { setId: string; total: string };
 type OwnedCountRow = { setId: string; ownedCount: number };
 
@@ -81,25 +90,34 @@ async function getOwnedCounts(userId: string, setIds: string[]): Promise<Map<str
   return new Map(rows.map((r) => [r.setId, r.ownedCount]));
 }
 
-export async function getSetsByEra(query: string, userId: string | null): Promise<EraGroup[]> {
+export async function getSetsByEra(
+  query: string,
+  userId: string | null,
+  page: number
+): Promise<SetSearchResult> {
   const where = query.trim()
     ? { name: { contains: query.trim(), mode: "insensitive" as const } }
     : {};
 
-  const sets = await prisma.cardSet.findMany({
-    where,
-    orderBy: [{ releaseDate: { sort: "desc", nulls: "last" } }, { name: "asc" }],
-    select: {
-      id: true,
-      name: true,
-      series: true,
-      code: true,
-      logoUrl: true,
-      symbolUrl: true,
-      releaseDate: true,
-      totalCards: true,
-    },
-  });
+  const [total, sets] = await Promise.all([
+    prisma.cardSet.count({ where }),
+    prisma.cardSet.findMany({
+      where,
+      orderBy: [{ releaseDate: { sort: "desc", nulls: "last" } }, { name: "asc" }],
+      skip: (page - 1) * SETS_PAGE_SIZE,
+      take: SETS_PAGE_SIZE,
+      select: {
+        id: true,
+        name: true,
+        series: true,
+        code: true,
+        logoUrl: true,
+        symbolUrl: true,
+        releaseDate: true,
+        totalCards: true,
+      },
+    }),
+  ]);
 
   const setIds = sets.map((s) => s.id);
   const [prices, ownedCounts] = await Promise.all([
@@ -125,7 +143,12 @@ export async function getSetsByEra(query: string, userId: string | null): Promis
     eras.set(era, list);
   }
 
-  return Array.from(eras.entries()).map(([era, sets]) => ({ era, sets }));
+  return {
+    eras: Array.from(eras.entries()).map(([era, sets]) => ({ era, sets })),
+    total,
+    page,
+    pageCount: Math.max(1, Math.ceil(total / SETS_PAGE_SIZE)),
+  };
 }
 
 export async function getSetDetail(id: string): Promise<SetDetail | null> {

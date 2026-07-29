@@ -27,7 +27,7 @@ export default async function Home({
   ]);
 
   const results = view === "singles" ? await searchCards(query, page) : null;
-  const eras = view === "sets" ? await getSetsByEra(query, user?.id ?? null) : null;
+  const setResults = view === "sets" ? await getSetsByEra(query, user?.id ?? null, page) : null;
   const watchedIds = results
     ? await getWatchlistedCardIds(
         user?.id ?? null,
@@ -107,8 +107,8 @@ export default async function Home({
           )
         )}
 
-        {view === "sets" && eras && (
-          eras.length === 0 ? (
+        {view === "sets" && setResults && (
+          setResults.eras.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-24 text-center">
               <p className="font-body text-lg font-medium text-ink">
                 {query ? `No sets found for “${query}”` : "No sets found"}
@@ -118,26 +118,31 @@ export default async function Home({
               </p>
             </div>
           ) : (
-            <div className="flex flex-col gap-8">
-              {eras.map((group) => (
-                <section key={group.era}>
-                  <div className="mb-3 flex items-baseline gap-2">
-                    <span
-                      aria-hidden="true"
-                      className="inline-block h-2.5 w-2.5 rounded-[3px] bg-emerald"
-                    />
-                    <h2 className="font-display text-lg font-semibold tracking-tight text-ink">
-                      {group.era}
-                    </h2>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
-                    {group.sets.map((set) => (
-                      <SetTile key={set.id} set={set} />
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
+            <>
+              <div className="flex flex-col gap-8">
+                {setResults.eras.map((group) => (
+                  <section key={group.era}>
+                    <div className="mb-3 flex items-baseline gap-2">
+                      <span
+                        aria-hidden="true"
+                        className="inline-block h-2.5 w-2.5 rounded-[3px] bg-emerald"
+                      />
+                      <h2 className="font-display text-lg font-semibold tracking-tight text-ink">
+                        {group.era}
+                      </h2>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+                      {group.sets.map((set) => (
+                        <SetTile key={set.id} set={set} />
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+              <div className="mt-8">
+                <Pagination query={query} page={setResults.page} pageCount={setResults.pageCount} view="sets" />
+              </div>
+            </>
           )
         )}
       </main>
