@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { CardListItem } from "@/lib/cards";
 import { WatchlistHeartButton } from "@/components/WatchlistHeartButton";
+import { QuickAddToCollectionButton } from "@/components/QuickAddToCollectionButton";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -62,11 +63,14 @@ export function CardTile({ card, watched }: { card: CardListItem; watched?: bool
         </div>
       </Link>
       {watched != null && (
-        <WatchlistHeartButton
-          target={{ cardId: card.id }}
-          initialWatched={watched}
-          className="absolute bottom-3 right-3"
-        />
+        <>
+          <WatchlistHeartButton
+            target={{ cardId: card.id }}
+            initialWatched={watched}
+            className="absolute top-2 right-2"
+          />
+          <QuickAddToCollectionButton cardId={card.id} className="absolute bottom-3 right-3" />
+        </>
       )}
     </div>
   );
