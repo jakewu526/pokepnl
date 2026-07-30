@@ -1,17 +1,21 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { addToCollection } from "@/app/actions/collection";
 
 export function QuickAddToCollectionButton({
   cardId,
+  isAuthed = true,
   className = "",
 }: {
   cardId: string;
+  isAuthed?: boolean;
   className?: string;
 }) {
   const [justAdded, setJustAdded] = useState(false);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   function handleClick(e: React.MouseEvent) {
     // Tiles wrap their whole card in a <Link> -- this button sits alongside
@@ -19,6 +23,11 @@ export function QuickAddToCollectionButton({
     // a cheap guard against ever bubbling into a parent navigation handler.
     e.preventDefault();
     e.stopPropagation();
+
+    if (!isAuthed) {
+      router.push("/signup");
+      return;
+    }
 
     startTransition(async () => {
       await addToCollection(cardId);

@@ -24,10 +24,16 @@ export function getGoogleClient(redirectUri: string): Google {
 // Built from the `Host` header rather than `request.nextUrl`/`request.url`:
 // in this Next.js version those reflect a fixed local origin instead of the
 // actual incoming Host header, which breaks for any non-localhost origin.
+//
+// Protocol defaults to "http", not to "https" whenever NODE_ENV is
+// "production" -- these services are self-hosted behind no TLS terminator,
+// and `next start` always sets NODE_ENV=production regardless of that. A
+// wrong "https" guess here produces a redirect_uri Google will never be able
+// to reach and cookies flagged Secure that the browser then silently drops
+// on the plain-http origin, killing the session on the very next navigation.
 export function getRequestOrigin(request: NextRequest): string {
   const host = request.headers.get("host");
-  const protocol =
-    request.headers.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
+  const protocol = request.headers.get("x-forwarded-proto") ?? "http";
   return `${protocol}://${host}`;
 }
 

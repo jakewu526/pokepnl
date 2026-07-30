@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   addCardToWatchlist,
   removeCardFromWatchlist,
@@ -13,14 +14,17 @@ type Target = { cardId: string; sealedProductId?: undefined } | { sealedProductI
 export function WatchlistHeartButton({
   target,
   initialWatched,
+  isAuthed = true,
   className = "",
 }: {
   target: Target;
   initialWatched: boolean;
+  isAuthed?: boolean;
   className?: string;
 }) {
   const [watched, setWatched] = useState(initialWatched);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   function handleClick(e: React.MouseEvent) {
     // Tiles wrap their whole card in a <Link> -- this button sits alongside
@@ -28,6 +32,11 @@ export function WatchlistHeartButton({
     // a cheap guard against ever bubbling into a parent navigation handler.
     e.preventDefault();
     e.stopPropagation();
+
+    if (!isAuthed) {
+      router.push("/signup");
+      return;
+    }
 
     const next = !watched;
     const isCard = target.cardId != null;

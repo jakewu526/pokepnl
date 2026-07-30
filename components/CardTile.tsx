@@ -15,10 +15,11 @@ function formatNumber(number: string, setTotal: number | null): string {
   return `${padded}/${setTotal}`;
 }
 
-// `watched` is `undefined` for signed-out visitors (no heart rendered at
-// all, since there's nowhere for it to save) vs. a real boolean once a user
-// is logged in.
+// `watched` is `undefined` for signed-out visitors -- the buttons still
+// render (so the feature is discoverable), they just redirect to signup
+// instead of saving anything, since there's nowhere yet for them to save it.
 export function CardTile({ card, watched }: { card: CardListItem; watched?: boolean }) {
+  const isAuthed = watched != null;
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-card border border-line bg-paper-raised transition-shadow hover:shadow-[0_2px_0_var(--line)]">
       <Link href={`/cards/${card.id}`} className="flex flex-1 flex-col">
@@ -62,16 +63,17 @@ export function CardTile({ card, watched }: { card: CardListItem; watched?: bool
           </div>
         </div>
       </Link>
-      {watched != null && (
-        <>
-          <WatchlistHeartButton
-            target={{ cardId: card.id }}
-            initialWatched={watched}
-            className="absolute top-2 right-2"
-          />
-          <QuickAddToCollectionButton cardId={card.id} className="absolute bottom-3 right-3" />
-        </>
-      )}
+      <WatchlistHeartButton
+        target={{ cardId: card.id }}
+        initialWatched={watched ?? false}
+        isAuthed={isAuthed}
+        className="absolute top-2 right-2"
+      />
+      <QuickAddToCollectionButton
+        cardId={card.id}
+        isAuthed={isAuthed}
+        className="absolute bottom-3 right-3"
+      />
     </div>
   );
 }

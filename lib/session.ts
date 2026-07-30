@@ -1,9 +1,20 @@
 import "server-only";
 import { SignJWT, jwtVerify } from "jose";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 const SESSION_COOKIE = "session";
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Whether *this* request actually arrived over HTTPS. These services are
+// self-hosted with no TLS terminator, so NODE_ENV=production (which
+// `next start` sets regardless) is not a reliable stand-in -- a cookie
+// flagged Secure on a plain-http origin (e.g. a Tailscale hostname, a LAN
+// IP) gets silently dropped by the browser, which then looks like the
+// session vanishing on the very next navigation.
+async function isHttpsRequest(): Promise<boolean> {
+  const headerStore = await headers();
+  return headerStore.get("x-forwarded-proto") === "https";
+}
 
 const encodedKey = new TextEncoder().encode(process.env.SESSION_SECRET);
 
@@ -37,7 +48,7 @@ export async function createSession(userId: string): Promise<void> {
 
   cookieStore.set(SESSION_COOKIE, session, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: await isHttpsRequest(),
     expires: expiresAt,
     sameSite: "lax",
     path: "/",

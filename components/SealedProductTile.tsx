@@ -9,9 +9,9 @@ const priceFormatter = new Intl.NumberFormat("en-US", {
   currency: "USD",
 });
 
-// `watched` is `undefined` for signed-out visitors (no heart rendered at
-// all, since there's nowhere for it to save) vs. a real boolean once a user
-// is logged in.
+// `watched` is `undefined` for signed-out visitors -- the heart still
+// renders (so the feature is discoverable), it just redirects to signup
+// instead of saving anything, since there's nowhere yet for it to save it.
 export function SealedProductTile({
   product,
   watched,
@@ -19,6 +19,7 @@ export function SealedProductTile({
   product: SealedProductListItem;
   watched?: boolean;
 }) {
+  const isAuthed = watched != null;
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-card border border-line bg-paper-raised transition-shadow hover:shadow-[0_2px_0_var(--line)]">
       <Link href={`/sealed/${product.id}`} className="flex flex-1 flex-col">
@@ -56,13 +57,12 @@ export function SealedProductTile({
           </div>
         </div>
       </Link>
-      {watched != null && (
-        <WatchlistHeartButton
-          target={{ sealedProductId: product.id }}
-          initialWatched={watched}
-          className="absolute bottom-3 right-3"
-        />
-      )}
+      <WatchlistHeartButton
+        target={{ sealedProductId: product.id }}
+        initialWatched={watched ?? false}
+        isAuthed={isAuthed}
+        className="absolute top-2 right-2"
+      />
     </div>
   );
 }

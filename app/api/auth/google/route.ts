@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
   const cookieOptions = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: getRequestOrigin(request).startsWith("https://"),
     maxAge: OAUTH_COOKIE_MAX_AGE,
     sameSite: "lax" as const,
     path: "/",
