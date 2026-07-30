@@ -21,9 +21,11 @@ function mergeCost(
 export async function addToCollection(
   cardId: string,
   condition: string = "NM",
-  costPerUnit?: number
+  costPerUnit?: number,
+  quantity: number = 1
 ): Promise<void> {
   const session = await verifySession();
+  const qty = Number.isFinite(quantity) && quantity >= 1 ? Math.floor(quantity) : 1;
 
   await prisma.$transaction(async (tx) => {
     const existing = await tx.collectionItem.findUnique({
@@ -35,15 +37,15 @@ export async function addToCollection(
         existing.costPerUnit != null ? parseFloat(existing.costPerUnit.toString()) : null,
         existing.quantity,
         costPerUnit,
-        1
+        qty
       );
       await tx.collectionItem.update({
         where: { id: existing.id },
-        data: { quantity: { increment: 1 }, costPerUnit: mergedCost },
+        data: { quantity: { increment: qty }, costPerUnit: mergedCost },
       });
     } else {
       await tx.collectionItem.create({
-        data: { userId: session.userId, cardId, condition, costPerUnit },
+        data: { userId: session.userId, cardId, condition, costPerUnit, quantity: qty },
       });
     }
   });
@@ -55,9 +57,11 @@ export async function addToCollection(
 export async function addSealedToCollection(
   sealedProductId: string,
   condition: string = "Mint",
-  costPerUnit?: number
+  costPerUnit?: number,
+  quantity: number = 1
 ): Promise<void> {
   const session = await verifySession();
+  const qty = Number.isFinite(quantity) && quantity >= 1 ? Math.floor(quantity) : 1;
 
   await prisma.$transaction(async (tx) => {
     const existing = await tx.collectionItem.findUnique({
@@ -71,15 +75,15 @@ export async function addSealedToCollection(
         existing.costPerUnit != null ? parseFloat(existing.costPerUnit.toString()) : null,
         existing.quantity,
         costPerUnit,
-        1
+        qty
       );
       await tx.collectionItem.update({
         where: { id: existing.id },
-        data: { quantity: { increment: 1 }, costPerUnit: mergedCost },
+        data: { quantity: { increment: qty }, costPerUnit: mergedCost },
       });
     } else {
       await tx.collectionItem.create({
-        data: { userId: session.userId, sealedProductId, condition, costPerUnit },
+        data: { userId: session.userId, sealedProductId, condition, costPerUnit, quantity: qty },
       });
     }
   });

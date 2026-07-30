@@ -21,6 +21,7 @@ export function AddSealedToCollectionForm({
   const [cost, setCost] = useState("");
   const [condition, setCondition] = useState<SealedCondition>("MINT");
   const [otherDescription, setOtherDescription] = useState("");
+  const [quantity, setQuantity] = useState("1");
 
   function handleAdd() {
     const parsed = parseFloat(cost);
@@ -29,12 +30,15 @@ export function AddSealedToCollectionForm({
       condition === "OTHER"
         ? otherDescription.trim().slice(0, SEALED_CONDITION_OTHER_MAX_LENGTH) || "Other"
         : SEALED_CONDITION_LABELS[condition];
+    const parsedQty = parseInt(quantity, 10);
+    const qty = Number.isFinite(parsedQty) && parsedQty >= 1 ? parsedQty : 1;
     startTransition(async () => {
-      await addSealedToCollection(sealedProductId, conditionValue, costPerUnit);
+      await addSealedToCollection(sealedProductId, conditionValue, costPerUnit, qty);
       setOpen(false);
       setCost("");
       setCondition("MINT");
       setOtherDescription("");
+      setQuantity("1");
     });
   }
 
@@ -109,6 +113,20 @@ export function AddSealedToCollectionForm({
           className="h-10 rounded-full border border-line bg-paper px-3 font-body text-sm text-ink outline-none focus:border-emerald"
         />
       )}
+
+      <label htmlFor="sealed-quantity-input" className="font-body text-xs font-medium text-ink-muted">
+        Quantity
+      </label>
+      <input
+        id="sealed-quantity-input"
+        type="number"
+        inputMode="numeric"
+        step="1"
+        min="1"
+        value={quantity}
+        onChange={(e) => setQuantity(e.target.value)}
+        className="h-10 w-20 rounded-full border border-line bg-paper px-3 font-data text-sm text-ink outline-none focus:border-emerald"
+      />
 
       <div className="flex items-center gap-3">
         <button

@@ -15,15 +15,19 @@ export function AddToCollectionForm({
   const [open, setOpen] = useState(false);
   const [cost, setCost] = useState("");
   const [condition, setCondition] = useState<Condition>("NM");
+  const [quantity, setQuantity] = useState("1");
 
   function handleAdd() {
     const parsed = parseFloat(cost);
     const costPerUnit = Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+    const parsedQty = parseInt(quantity, 10);
+    const qty = Number.isFinite(parsedQty) && parsedQty >= 1 ? parsedQty : 1;
     startTransition(async () => {
-      await addToCollection(cardId, condition, costPerUnit);
+      await addToCollection(cardId, condition, costPerUnit, qty);
       setOpen(false);
       setCost("");
       setCondition("NM");
+      setQuantity("1");
     });
   }
 
@@ -88,6 +92,20 @@ export function AddToCollectionForm({
           </option>
         ))}
       </select>
+
+      <label htmlFor="card-quantity-input" className="font-body text-xs font-medium text-ink-muted">
+        Quantity
+      </label>
+      <input
+        id="card-quantity-input"
+        type="number"
+        inputMode="numeric"
+        step="1"
+        min="1"
+        value={quantity}
+        onChange={(e) => setQuantity(e.target.value)}
+        className="h-10 w-20 rounded-full border border-line bg-paper px-3 font-data text-sm text-ink outline-none focus:border-emerald"
+      />
 
       <div className="flex items-center gap-3">
         <button
