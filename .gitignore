@@ -53,3 +53,6 @@ desktop.ini
 
 # daily price-sync task logs
 /logs/
+
+# nssm service stdout/stderr redirect (prod and UAT checkouts both accumulate one)
+nssm-service.log
