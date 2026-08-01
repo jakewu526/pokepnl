@@ -491,6 +491,12 @@ These are SQL / arithmetic checks, not clicking.
 | UI-11 | Long card names | truncate/wrap without breaking the tile |
 | UI-12 | Loading skeletons | no layout shift when content arrives |
 | UI-13 | Rotating watchlist card on mobile | doesn't overflow or trap scroll |
+| UI-14 | **Every `/_next/static` asset the page references returns 200** | 0 broken. A rebuild against a live checkout renames content-hashed chunks under the running server, so the HTML asks for files that no longer exist — the page returns 200 with full markup and *no CSS or JS*. Automated in `audit:http` |
+| UI-15 | Stylesheet payload is a real size (>5 KB) | catches a tree-shaken or empty sheet |
+| UI-16 | `<meta name="viewport">` present | `width=device-width, initial-scale=1` |
+| UI-17 | Served CSS contains all breakpoints + dark block | `40rem`, `48rem`, `64rem`, `prefers-color-scheme` |
+| UI-18 | **Check on a real phone, over the Funnel URL**, not just a resized desktop window | iOS Safari and Android Chrome differ from devtools emulation |
+| UI-19 | Hard-refresh the phone after every deploy before judging a visual bug | phones cache HTML and chunks aggressively (see ENV-07) |
 
 ---
 
@@ -503,6 +509,7 @@ These are SQL / arithmetic checks, not clicking.
 | OPS-03 | `npx tsc --noEmit` | clean |
 | OPS-04 | `npm run lint` | clean |
 | OPS-05 | Migrations applied to both DBs before restart | yes |
+| OPS-05b | **Never leave a checkout built-but-not-restarted.** `npm run build` replaces content-hashed chunks under the live server; until it restarts, the running service serves HTML pointing at files that no longer exist | build and restart back to back, then run UI-14 |
 | OPS-06 | Service restarts cleanly, log shows no startup errors | yes |
 | OPS-07 | Daily price sync ran (check newest `capturedDate`) | within 24–48h |
 | OPS-08 | Google OAuth redirect URIs still registered for all four origins | yes |

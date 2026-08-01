@@ -154,9 +154,34 @@ async function main() {
   await hit("SEAL-06", `/sealed/${sealed.id}`, { status: 200, bodyIncludes: sealed.name });
   await hit("SEAL-11", "/sealed/not-a-real-id", { rawIncludes: NOT_FOUND_MARKER });
 
+  // Chunk filenames are content-hashed, so `npm run build` against a checkout
+  // whose service is still running swaps the files out from under it: the live
+  // server keeps emitting the previous names and every one of them 404s. The
+  // page still returns 200 with all its markup -- it just arrives with no CSS
+  // and no JS, which reads as "the site lost all its styling" and is easy to
+  // mistake for a mobile-only bug. Always restart immediately after building.
+  console.log("\n== Static assets referenced by the shell (UI-14) ==");
+  const shell = await (await fetch(BASE + "/")).text();
+  const refs = [...new Set(shell.match(/\/_next\/static\/[A-Za-z0-9_\-/.]+?\.(?:css|js)/g) ?? [])];
+  let assetBad = 0;
+  let cssBytes = 0;
+  for (const ref of refs) {
+    const res = await fetch(BASE + ref);
+    if (!res.ok) assetBad++;
+    else if (ref.endsWith(".css")) cssBytes += (await res.arrayBuffer()).byteLength;
+  }
+  if (assetBad) failures++;
+  console.log(`  ${assetBad ? "FAIL" : "PASS"}  [UI-14] ${refs.length} asset refs, ${assetBad} broken`);
+  const cssOk = cssBytes > 5000;
+  if (!cssOk) failures++;
+  console.log(`  ${cssOk ? "PASS" : "FAIL"}  [UI-15] stylesheet payload ${cssBytes}b (a near-empty sheet means an unstyled page)`);
+
   console.log("\n== Image pipeline ==");
   const [img] = await pick(`SELECT "imageUrl" u FROM "Card" WHERE "imageUrl" IS NOT NULL LIMIT 1`);
-  await hit("IMG-04", `/_next/image?url=${encodeURIComponent(img.u)}&w=256&q=75`, { status: 200, maxMs: 8000 });
+  // No tight timing bound here: a cold optimize is ~100-400ms on its own, but
+  // this runs at the tail of a full sweep and the contention alone can push a
+  // single miss past 30s. Only a hard failure is meaningful.
+  await hit("IMG-04", `/_next/image?url=${encodeURIComponent(img.u)}&w=256&q=75`, { status: 200 });
   await hit("IMG-03", `/_next/image?url=${encodeURIComponent("https://evil.example.com/x.png")}&w=256&q=75`, { status: 400 });
 
   console.log("\n== Auth states ==");
