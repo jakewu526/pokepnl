@@ -36,6 +36,18 @@ export default async function proxy(req: NextRequest) {
     return response;
   }
 
+  // The cookie also needs to be set the moment /collection is reached through
+  // ANY other path (a direct login redirect, a bookmark, a session that
+  // predates this cookie existing) -- otherwise the "Binder" link's very
+  // first click bounces straight back to /collection (the redirect-once
+  // check above still thinks it's a "fresh visit"), which looks like the
+  // link does nothing since you're already on the page it redirects to.
+  if (isProtectedRoute && session?.userId && !req.cookies.get(DASHBOARD_LANDED_COOKIE)) {
+    const response = NextResponse.next();
+    response.cookies.set(DASHBOARD_LANDED_COOKIE, "1", { path: "/", sameSite: "lax" });
+    return response;
+  }
+
   return NextResponse.next();
 }
 
