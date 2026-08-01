@@ -11,6 +11,8 @@ import { getPortfolioData } from "@/lib/portfolio";
 import { getPnlSummary, getRealizedProfitHistory, getTransactionHistory } from "@/lib/pnl";
 import { getLatestPrices } from "@/lib/cards";
 import { getLatestSealedPrices } from "@/lib/sealed";
+import { getFeaturedWatchlistCard } from "@/lib/watchlist";
+import { RotatingWatchlistCard } from "@/components/RotatingWatchlistCard";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -25,7 +27,7 @@ function signedPrice(value: number): string {
 export default async function CollectionPage() {
   const session = await verifySession();
 
-  const [items, portfolio, pnl, profitHistory, transactions] = await Promise.all([
+  const [items, portfolio, pnl, profitHistory, transactions, featuredOptions] = await Promise.all([
     prisma.collectionItem.findMany({
       where: { userId: session.userId },
       orderBy: { createdAt: "desc" },
@@ -54,7 +56,12 @@ export default async function CollectionPage() {
     getPnlSummary(session.userId),
     getRealizedProfitHistory(session.userId),
     getTransactionHistory(session.userId),
+    getFeaturedWatchlistCard(session.userId),
   ]);
+
+  const pinnedCard = featuredOptions.find((o) => o.featured);
+  const featuredCard =
+    pinnedCard ?? (featuredOptions.length ? featuredOptions[Math.floor(Math.random() * featuredOptions.length)] : null);
 
   const cardIds = items.filter((i) => i.cardId).map((i) => i.cardId!);
   const sealedIds = items.filter((i) => i.sealedProductId).map((i) => i.sealedProductId!);
@@ -97,39 +104,45 @@ export default async function CollectionPage() {
           My Collection
         </h1>
 
-        {items.length > 0 && (
-          <div className="mb-8 flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="rounded-card border border-line bg-paper-raised px-4 py-3">
-                <p className="font-body text-xs text-ink-muted">Total value</p>
-                <p className="font-data text-2xl font-medium text-emerald-strong">
-                  {priceFormatter.format(portfolio.summary.totalValue)}
-                </p>
-              </div>
-              <div className="rounded-card border border-line bg-paper-raised px-4 py-3">
-                <p className="font-body text-xs text-ink-muted">
-                  Cards · {portfolio.summary.cardCount}
-                </p>
-                <p className="font-data text-2xl font-medium text-ink">
-                  {priceFormatter.format(portfolio.summary.cardValue)}
-                </p>
-              </div>
-              <div className="rounded-card border border-line bg-paper-raised px-4 py-3">
-                <p className="font-body text-xs text-ink-muted">
-                  Sealed · {portfolio.summary.sealedCount}
-                </p>
-                <p className="font-data text-2xl font-medium text-ink">
-                  {priceFormatter.format(portfolio.summary.sealedValue)}
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <h2 className="mb-2 font-body text-sm font-semibold text-ink">Collection value over time</h2>
-              <PriceChart points={portfolio.history} source={null} />
-            </div>
+        <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-[300px_1fr] lg:items-start">
+          <div className="flex justify-center lg:sticky lg:top-24">
+            <RotatingWatchlistCard featured={featuredCard} options={featuredOptions} />
           </div>
-        )}
+
+          {items.length > 0 && (
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-card border border-line bg-paper-raised px-4 py-3">
+                  <p className="font-body text-xs text-ink-muted">Total value</p>
+                  <p className="font-data text-2xl font-medium text-emerald-strong">
+                    {priceFormatter.format(portfolio.summary.totalValue)}
+                  </p>
+                </div>
+                <div className="rounded-card border border-line bg-paper-raised px-4 py-3">
+                  <p className="font-body text-xs text-ink-muted">
+                    Cards · {portfolio.summary.cardCount}
+                  </p>
+                  <p className="font-data text-2xl font-medium text-ink">
+                    {priceFormatter.format(portfolio.summary.cardValue)}
+                  </p>
+                </div>
+                <div className="rounded-card border border-line bg-paper-raised px-4 py-3">
+                  <p className="font-body text-xs text-ink-muted">
+                    Sealed · {portfolio.summary.sealedCount}
+                  </p>
+                  <p className="font-data text-2xl font-medium text-ink">
+                    {priceFormatter.format(portfolio.summary.sealedValue)}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <h2 className="mb-2 font-body text-sm font-semibold text-ink">Collection value over time</h2>
+                <PriceChart points={portfolio.history} source={null} />
+              </div>
+            </div>
+          )}
+        </div>
 
         {(pnl.realizedProfit !== 0 || pnl.unrealizedProfit !== 0 || transactions.length > 0) && (
           <div className="mb-8 flex flex-col gap-4">

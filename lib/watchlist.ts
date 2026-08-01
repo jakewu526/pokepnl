@@ -29,6 +29,40 @@ export async function getWatchlistedSealedIds(
   return new Set(rows.map((r) => r.sealedProductId!));
 }
 
+export type FeaturedCardOption = {
+  watchlistItemId: string;
+  featured: boolean;
+  card: { id: string; name: string; number: string; imageUrl: string | null; setName: string };
+};
+
+// Card-only watchlist rows (sealed product rows are excluded -- the featured
+// panel renders a card front/back, not a box), used to pick a card to feature
+// on the /collection dashboard, either pinned by the user or picked at random.
+export async function getFeaturedWatchlistCard(userId: string): Promise<FeaturedCardOption[]> {
+  const rows = await prisma.watchlistItem.findMany({
+    where: { userId, cardId: { not: null } },
+    select: {
+      id: true,
+      featured: true,
+      card: { select: { id: true, name: true, number: true, imageUrl: true, set: { select: { name: true } } } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  return rows
+    .filter((r) => r.card)
+    .map((r) => ({
+      watchlistItemId: r.id,
+      featured: r.featured,
+      card: {
+        id: r.card!.id,
+        name: r.card!.name,
+        number: r.card!.number,
+        imageUrl: r.card!.imageUrl,
+        setName: r.card!.set.name,
+      },
+    }));
+}
+
 export type WatchlistSummary = {
   totalValue: number;
   cardValue: number;

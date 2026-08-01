@@ -87,6 +87,7 @@ model WatchlistItem {
   userId          String
   cardId          String?
   sealedProductId String?
+  featured        Boolean  @default(false)
   createdAt       DateTime @default(now())
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)

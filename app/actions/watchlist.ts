@@ -26,6 +26,25 @@ export async function removeCardFromWatchlist(cardId: string): Promise<void> {
   revalidatePath(`/cards/${cardId}`);
 }
 
+export async function setFeaturedWatchlistCard(watchlistItemId: string | null): Promise<void> {
+  const session = await verifySession();
+  await prisma.$transaction([
+    prisma.watchlistItem.updateMany({
+      where: { userId: session.userId, featured: true },
+      data: { featured: false },
+    }),
+    ...(watchlistItemId
+      ? [
+          prisma.watchlistItem.update({
+            where: { id: watchlistItemId, userId: session.userId },
+            data: { featured: true },
+          }),
+        ]
+      : []),
+  ]);
+  revalidatePath("/collection");
+}
+
 export async function addSealedToWatchlist(sealedProductId: string): Promise<void> {
   const session = await verifySession();
   await prisma.watchlistItem.upsert({
