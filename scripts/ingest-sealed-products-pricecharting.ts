@@ -75,7 +75,7 @@ async function upsertSealedProduct(
   setId: string | null,
   name: string,
   type: string,
-  row: PriceGuideRow
+  row: PriceGuideRow & { loosePrice: number }
 ): Promise<"linked" | "created" | "skipped"> {
   try {
     // Prisma's typed compound-unique `where` rejects `null` for a component
@@ -121,14 +121,14 @@ async function upsertSealedProduct(
 // collector can buy and resell, not noise to collapse away. The only
 // dedup is exact-productName repeats (shouldn't occur in PriceCharting's
 // export, but guards against double-processing all the same).
-function sealedRowsForConsole(rows: PriceGuideRow[]): PriceGuideRow[] {
+function sealedRowsForConsole(rows: PriceGuideRow[]): (PriceGuideRow & { loosePrice: number })[] {
   const seen = new Set<string>();
-  const result: PriceGuideRow[] = [];
+  const result: (PriceGuideRow & { loosePrice: number })[] = [];
   for (const row of rows) {
     if (!isSealedGenre(row.genre) || row.loosePrice == null) continue;
     if (seen.has(row.productName)) continue;
     seen.add(row.productName);
-    result.push(row);
+    result.push({ ...row, loosePrice: row.loosePrice });
   }
   return result;
 }
