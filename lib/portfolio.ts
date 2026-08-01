@@ -43,8 +43,13 @@ export async function getPortfolioData(userId: string): Promise<PortfolioData> {
       ? prisma.$queryRaw<CardHistoryRow[]>`
           SELECT "cardId", source, price::text AS price, "capturedDate"
           FROM "PriceSnapshot"
-          WHERE "cardId" = ANY(${cardIds}) AND "priceType" = 'MARKET'
+          WHERE "cardId" = ANY(${cardIds}) AND "priceType" = 'MARKET' AND variant = 'NORMAL'
             AND source IN ('PRICECHARTING', 'TCGPLAYER', 'CARDMARKET')
+            -- Raw/ungraded prices only. PriceCharting's graded tiers land on
+            -- the same capturedDate as the ungraded row, and buildSeries keeps
+            -- the last row it sees per date -- so without this the portfolio
+            -- chart quietly values every card at PSA-10/Grade-9.5 money.
+            AND (source <> 'PRICECHARTING' OR condition IS NULL)
           ORDER BY "capturedDate" ASC
         `
       : Promise.resolve([]),

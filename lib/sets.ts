@@ -57,6 +57,9 @@ async function getSetPrices(setIds: string[]): Promise<Map<string, number>> {
     LEFT JOIN LATERAL (
       SELECT price FROM "PriceSnapshot"
       WHERE "cardId" = c.id AND "priceType" = 'MARKET' AND variant = 'NORMAL' AND source = 'PRICECHARTING'
+        -- Raw/ungraded only, or a set's "complete it" price becomes the cost
+        -- of a PSA-10 master set (see lib/cards.ts getLatestPrices).
+        AND condition IS NULL
       ORDER BY "capturedDate" DESC LIMIT 1
     ) pc ON true
     LEFT JOIN LATERAL (

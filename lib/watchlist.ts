@@ -108,8 +108,10 @@ export async function getWatchlistData(userId: string): Promise<WatchlistData> {
       ? prisma.$queryRaw<CardHistoryRow[]>`
           SELECT "cardId", source, price::text AS price, "capturedDate"
           FROM "PriceSnapshot"
-          WHERE "cardId" = ANY(${cardIds}) AND "priceType" = 'MARKET'
+          WHERE "cardId" = ANY(${cardIds}) AND "priceType" = 'MARKET' AND variant = 'NORMAL'
             AND source IN ('PRICECHARTING', 'TCGPLAYER', 'CARDMARKET')
+            -- Raw/ungraded only -- see the matching guard in lib/portfolio.ts.
+            AND (source <> 'PRICECHARTING' OR condition IS NULL)
           ORDER BY "capturedDate" ASC
         `
       : Promise.resolve([]),

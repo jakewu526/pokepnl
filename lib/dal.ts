@@ -12,6 +12,18 @@ export const verifySession = cache(async () => {
     redirect("/login");
   }
 
+  // A cookie that decrypts is not proof the account still exists -- see
+  // app/api/auth/reset/route.ts. Without this check the page renders as an
+  // empty-but-signed-in dashboard and the user can never reach /login again,
+  // because the proxy (which only sees the JWT) keeps redirecting away from it.
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { id: true },
+  });
+  if (!user) {
+    redirect("/api/auth/reset");
+  }
+
   return { isAuth: true, userId: session.userId };
 });
 

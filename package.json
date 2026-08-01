@@ -21,7 +21,9 @@
     "backfill:pricecharting:details": "tsx scripts/backfill-pricecharting-details.ts",
     "backfill:set-branding": "tsx scripts/backfill-set-branding.ts",
     "snapshot:prices": "tsx scripts/snapshot-prices.ts",
-    "report:counts": "tsx scripts/report-counts.ts"
+    "report:counts": "tsx scripts/report-counts.ts",
+    "audit:data": "tsx scripts/audit-data.ts",
+    "audit:http": "tsx scripts/audit-http.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

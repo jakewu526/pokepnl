@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { decrypt } from "@/lib/session";
 
-const protectedRoutes = ["/collection"];
+// Signed-out visitors get bounced here rather than rendering the page: these
+// pages call verifySession(), whose redirect() only reaches the browser as a
+// 1-second `<meta http-equiv="refresh">` once streaming has started -- which
+// shows up as a blank white page before the login form appears.
+const protectedRoutes = ["/collection", "/watchlist"];
 const authRoutes = ["/login", "/signup"];
 const dashboardRedirectRoutes = ["/"];
+// Only the dashboard itself marks the visitor as "already landed" -- reaching
+// the watchlist shouldn't consume the one-time redirect to /collection.
+const dashboardRoutes = ["/collection"];
 const DASHBOARD_LANDED_COOKIE = "dash_landed";
 
 export default async function proxy(req: NextRequest) {
   const path = req.nextUrl.pathname;
   const isProtectedRoute = protectedRoutes.some((route) => path.startsWith(route));
+  const isDashboardRoute = dashboardRoutes.some((route) => path.startsWith(route));
   const isAuthRoute = authRoutes.includes(path);
   const isDashboardRedirectRoute = dashboardRedirectRoutes.includes(path);
 
@@ -42,7 +50,7 @@ export default async function proxy(req: NextRequest) {
   // first click bounces straight back to /collection (the redirect-once
   // check above still thinks it's a "fresh visit"), which looks like the
   // link does nothing since you're already on the page it redirects to.
-  if (isProtectedRoute && session?.userId && !req.cookies.get(DASHBOARD_LANDED_COOKIE)) {
+  if (isDashboardRoute && session?.userId && !req.cookies.get(DASHBOARD_LANDED_COOKIE)) {
     const response = NextResponse.next();
     response.cookies.set(DASHBOARD_LANDED_COOKIE, "1", { path: "/", sameSite: "lax" });
     return response;

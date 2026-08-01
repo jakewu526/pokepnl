@@ -211,6 +211,12 @@ export async function getCardDetail(id: string): Promise<CardDetail | null> {
     FROM "PriceSnapshot"
     WHERE "cardId" = ${id} AND "priceType" = 'MARKET' AND variant = 'NORMAL'
       AND source IN ('PRICECHARTING', 'TCGPLAYER', 'CARDMARKET')
+      -- PriceCharting writes one MARKET/NORMAL row per grade tier (condition
+      -- 'Grade 7'..'PSA 10') alongside the raw/ungraded row (condition NULL),
+      -- all on the same capturedDate. Without this guard the "current price"
+      -- and the main chart silently become a graded series -- see
+      -- getCardGradeHistories for the deliberate multi-grade view.
+      AND (source <> 'PRICECHARTING' OR condition IS NULL)
     ORDER BY "capturedDate" ASC
   `;
 
@@ -282,6 +288,10 @@ export async function getLatestPrices(
       SELECT ps.price
       FROM "PriceSnapshot" ps
       WHERE ps."cardId" = c.id AND ps."priceType" = 'MARKET' AND ps.variant = 'NORMAL' AND ps.source = s.source::"PriceSource"
+        -- Raw/ungraded only: PriceCharting's graded tiers share the
+        -- capturedDate of the ungraded row, so an unqualified LIMIT 1 returns
+        -- whichever grade Postgres happens to reach first.
+        AND (ps.source <> 'PRICECHARTING' OR ps.condition IS NULL)
       ORDER BY ps."capturedDate" DESC
       LIMIT 1
     ) src
