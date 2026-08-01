@@ -5,6 +5,12 @@ import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 export default function SignupPage() {
   return (
     <div className="mx-auto flex min-h-full w-full max-w-sm flex-col justify-center px-4 py-16">
+      <Link
+        href="/"
+        className="mb-6 self-start font-body text-sm font-medium text-emerald-strong hover:underline"
+      >
+        ← Binder
+      </Link>
       <div className="mb-6 flex items-baseline gap-3">
         <span aria-hidden="true" className="inline-block h-3 w-3 rounded-[3px] bg-emerald" />
         <h1 className="font-display text-2xl font-semibold tracking-tight text-ink">

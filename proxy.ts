@@ -4,6 +4,7 @@ import { decrypt } from "@/lib/session";
 const protectedRoutes = ["/collection"];
 const authRoutes = ["/login", "/signup"];
 const dashboardRedirectRoutes = ["/"];
+const DASHBOARD_LANDED_COOKIE = "dash_landed";
 
 export default async function proxy(req: NextRequest) {
   const path = req.nextUrl.pathname;
@@ -22,16 +23,17 @@ export default async function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL("/collection", req.nextUrl));
   }
 
-  // Signed-in visitors land on their dashboard when they open the site fresh
-  // (typed URL, bookmark, new tab). In-app navigation back to "/" -- e.g. the
-  // "Binder" logo or a "Browse cards" link -- carries a same-origin Referer
-  // and is left alone, since "/" is still the only catalog/browse route.
-  if (isDashboardRedirectRoute && session?.userId) {
-    const referer = req.headers.get("referer");
-    const isSameOriginNav = referer && new URL(referer).origin === req.nextUrl.origin;
-    if (!isSameOriginNav) {
-      return NextResponse.redirect(new URL("/collection", req.nextUrl));
-    }
+  // Signed-in visitors land on their dashboard the first time they open the
+  // site in a browser session. After that first landing (tracked by a
+  // session-lifetime cookie, not the Referer header -- Referer isn't sent
+  // reliably for history back/forward navigation, which made both the
+  // "Binder" logo link and the browser Back button feel broken/looping),
+  // "/" behaves like a normal route: the catalog, its links, and the back
+  // button all just work.
+  if (isDashboardRedirectRoute && session?.userId && !req.cookies.get(DASHBOARD_LANDED_COOKIE)) {
+    const response = NextResponse.redirect(new URL("/collection", req.nextUrl));
+    response.cookies.set(DASHBOARD_LANDED_COOKIE, "1", { path: "/", sameSite: "lax" });
+    return response;
   }
 
   return NextResponse.next();
