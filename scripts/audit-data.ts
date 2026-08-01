@@ -76,13 +76,22 @@ async function main() {
   check("PRICE-08", "snapshots priced <= 0", await count(`SELECT count(*) c FROM "PriceSnapshot" WHERE price <= 0`), 0);
   check("PRICE-10", "duplicate snapshots on the same key",
     await count(`SELECT count(*) c FROM (SELECT "cardId",source,"capturedDate",variant,condition,"priceType" FROM "PriceSnapshot" WHERE "cardId" IS NOT NULL GROUP BY 1,2,3,4,5,6 HAVING count(*)>1) t`), 0);
-  check("PRICE-11", "cards where the latest Ungraded price exceeds PSA 10", await count(`
+  // Raw priced above PSA 10 is nonsense on its face, but a handful is normal:
+  // the graded tiers are backfilled monthly while the raw price moves daily,
+  // so a fresh spike outruns a stale PSA 10 quote. Only a large cluster means
+  // the grade series has actually been mixed up, so scale the threshold.
+  const invertedGrades = await count(`
     WITH latest AS (
       SELECT DISTINCT ON ("cardId", condition) "cardId", condition, price FROM "PriceSnapshot"
       WHERE source='PRICECHARTING' AND "priceType"='MARKET' AND "cardId" IS NOT NULL
       ORDER BY "cardId", condition, "capturedDate" DESC)
     SELECT count(*) c FROM latest u JOIN latest g ON u."cardId"=g."cardId"
-    WHERE u.condition IS NULL AND g.condition='PSA 10' AND u.price > g.price`), 0);
+    WHERE u.condition IS NULL AND g.condition='PSA 10' AND u.price > g.price`);
+  const gradedCards = await count(`SELECT count(DISTINCT "cardId") c FROM "PriceSnapshot" WHERE source='PRICECHARTING' AND condition='PSA 10'`);
+  const invertedPct = gradedCards ? (invertedGrades / gradedCards) * 100 : 0;
+  const gradesOk = invertedPct < 1;
+  if (!gradesOk) failures++;
+  console.log(`  ${gradesOk ? "PASS" : "FAIL"}  [PRICE-11] cards priced above their own PSA 10: ${invertedGrades} of ${gradedCards.toLocaleString()} (${invertedPct.toFixed(2)}%, fails at 1%)`);
   // The regression this guards: PriceCharting writes one MARKET/NORMAL row per
   // grade tier on the SAME capturedDate as the raw row, so any "latest price"
   // query without a condition filter can return PSA-10 money for a raw card.

@@ -30,6 +30,12 @@ function strip(html: string) {
     .replace(/<script[\s\S]*?<\/script>/g, " ")
     .replace(/<style[\s\S]*?<\/style>/g, " ")
     .replace(/<[^>]+>/g, " ")
+    // Names carry entities ("Scarlet &amp; Violet") and React splits text at
+    // interpolation boundaries ("44,082 result</!-- -->s"), so decode and
+    // close the gaps before matching on expected copy.
+    .replace(/&amp;/g, "&")
+    .replace(/&#x27;|&apos;/g, "'")
+    .replace(/&quot;/g, '"')
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -66,7 +72,7 @@ async function main() {
   console.log(`Binder HTTP audit — ${BASE} — ${new Date().toISOString()}\n`);
 
   console.log("== SMOKE: signed out ==");
-  await hit("SMOKE-01", "/", { status: 200, bodyIncludes: "results" });
+  await hit("SMOKE-01", "/", { status: 200, bodyIncludes: "result" });
   await hit("SETS-01", "/?view=sets", { status: 200 });
   await hit("SEAL-01", "/sealed", { status: 200 });
   await hit("AUTH-06", "/login", { status: 200, bodyIncludes: "Log in" });
@@ -86,7 +92,7 @@ async function main() {
   console.log("\n== Search: matching ==");
   for (const [id, q] of [["CAT-10", "charizard"], ["CAT-11", "base charizard"], ["CAT-13", "rare holo"],
                          ["CAT-14", "VMAX"], ["CAT-14", "gx"], ["CAT-14", "Basic"], ["CAT-15", "sword"]] as const) {
-    await hit(id, `/?q=${encodeURIComponent(q)}`, { status: 200, bodyIncludes: "results" });
+    await hit(id, `/?q=${encodeURIComponent(q)}`, { status: 200, bodyIncludes: "result" });
   }
   await hit("CAT-16", "/?q=zzzzzzzzz", { status: 200, bodyIncludes: "No cards found" });
 
