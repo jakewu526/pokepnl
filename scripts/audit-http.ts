@@ -40,7 +40,22 @@ function strip(html: string) {
     .trim();
 }
 
-type Expect = { status?: number; location?: string; bodyIncludes?: string; bodyExcludes?: string; maxMs?: number };
+type Expect = {
+  status?: number;
+  location?: string;
+  locationEndsWith?: string;
+  bodyIncludes?: string;
+  bodyExcludes?: string;
+  rawIncludes?: string;
+  maxMs?: number;
+};
+
+// notFound() raised inside an already-streaming page can't change the status
+// line or the flushed shell: Next ships the 404 boundary as an inline template
+// the client swaps in, so the response stays 200 and the raw HTML looks empty
+// even though the browser renders app/not-found.tsx correctly. Assert on the
+// boundary marker rather than on visible text.
+const NOT_FOUND_MARKER = "NEXT_HTTP_ERROR_FALLBACK;404";
 
 async function hit(id: string, path: string, expect: Expect = {}, cookie = "") {
   const t0 = Date.now();
@@ -48,7 +63,7 @@ async function hit(id: string, path: string, expect: Expect = {}, cookie = "") {
   let body = "";
   try {
     res = await fetch(BASE + path, { redirect: "manual", headers: cookie ? { cookie } : {} });
-    body = res.status < 300 ? await res.text() : "";
+    body = res.status < 300 || res.status >= 400 ? await res.text() : "";
   } catch (e) {
     failures++;
     console.log(`  FAIL  [${id}] ${path} — request threw: ${(e as Error).message}`);
@@ -59,7 +74,9 @@ async function hit(id: string, path: string, expect: Expect = {}, cookie = "") {
   const problems: string[] = [];
   if (expect.status != null && res.status !== expect.status) problems.push(`status ${res.status} != ${expect.status}`);
   if (expect.location != null && loc !== expect.location) problems.push(`location ${loc} != ${expect.location}`);
+  if (expect.locationEndsWith != null && !loc?.endsWith(expect.locationEndsWith)) problems.push(`location ${loc} !endsWith ${expect.locationEndsWith}`);
   if (expect.bodyIncludes && !strip(body).includes(expect.bodyIncludes)) problems.push(`body missing "${expect.bodyIncludes}"`);
+  if (expect.rawIncludes && !body.includes(expect.rawIncludes)) problems.push(`raw body missing "${expect.rawIncludes}"`);
   if (expect.bodyExcludes && body.includes(expect.bodyExcludes)) problems.push(`body contains "${expect.bodyExcludes}"`);
   if (expect.maxMs && ms > expect.maxMs) problems.push(`${ms}ms > ${expect.maxMs}ms`);
   if (problems.length) failures++;
@@ -125,17 +142,17 @@ async function main() {
   await hit("CARD-01", `/cards/${withImg.id}`, { status: 200, bodyIncludes: withImg.name });
   await hit("CAT-06", `/cards/${noImg.id}`, { status: 200, bodyIncludes: noImg.name });
   await hit("CARD-03", `/cards/${noPrice.id}`, { status: 200 });
-  await hit("CARD-16", "/cards/not-a-real-id", { status: 404, bodyIncludes: "couldn" });
+  await hit("CARD-16", "/cards/not-a-real-id", { rawIncludes: NOT_FOUND_MARKER });
 
   const [bigSet] = await pick(`SELECT s.id, s.name FROM "CardSet" s JOIN "Card" c ON c."setId"=s.id GROUP BY s.id, s.name ORDER BY count(c.id) DESC LIMIT 1`);
   await hit("SETD-05", `/sets/${bigSet.id}`, { status: 200, maxMs: 4000 });
-  await hit("SETD-07", "/sets/not-a-real-id", { status: 404, bodyIncludes: "couldn" });
+  await hit("SETD-07", "/sets/not-a-real-id", { rawIncludes: NOT_FOUND_MARKER });
   const [emptySet] = await pick(`SELECT s.id FROM "CardSet" s LEFT JOIN "Card" c ON c."setId"=s.id WHERE c.id IS NULL LIMIT 1`);
   if (emptySet) await hit("SETD-01", `/sets/${emptySet.id}`, { status: 200 });
 
   const [sealed] = await pick(`SELECT id, name FROM "SealedProduct" WHERE "imageUrl" IS NOT NULL LIMIT 1`);
   await hit("SEAL-06", `/sealed/${sealed.id}`, { status: 200, bodyIncludes: sealed.name });
-  await hit("SEAL-11", "/sealed/not-a-real-id", { status: 404, bodyIncludes: "couldn" });
+  await hit("SEAL-11", "/sealed/not-a-real-id", { rawIncludes: NOT_FOUND_MARKER });
 
   console.log("\n== Image pipeline ==");
   const [img] = await pick(`SELECT "imageUrl" u FROM "Card" WHERE "imageUrl" IS NOT NULL LIMIT 1`);
@@ -164,8 +181,10 @@ async function main() {
   // out of /login -- see app/api/auth/reset/route.ts.
   const ghost = `session=${await mint("cl000000000000000000000000")}; dash_landed=1`;
   console.log("  (orphaned session)");
-  await hit("AUTH-48", "/collection", { status: 307, location: "/api/auth/reset" }, ghost);
-  await hit("AUTH-48", "/api/auth/reset", { status: 307, location: "/login" }, ghost);
+  // Same streaming caveat as NOT_FOUND_MARKER: verifySession's redirect lands
+  // as a meta refresh, so this is a 200 whose body points at the reset route.
+  await hit("AUTH-48", "/collection", { status: 200, rawIncludes: "1;url=/api/auth/reset" }, ghost);
+  await hit("AUTH-48", "/api/auth/reset", { status: 307, locationEndsWith: "/login" }, ghost);
   await hit("AUTH-48", "/", { status: 200 }, ghost);
 
   console.log("  (tampered / expired session)");

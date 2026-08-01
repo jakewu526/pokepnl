@@ -514,7 +514,26 @@ These are SQL / arithmetic checks, not clicking.
 
 | Date | Env | Suites run | Result | Notes |
 |---|---|---|---|---|
-| 2026-07-31 | prod | Full sweep (all suites, DB + HTTP level) | See `TEST-RESULTS-2026-07-31.md` | First formal run |
+| 2026-07-31 | prod | All suites at DB + HTTP level; UI suites by review only | 8 defects — see [TEST-RESULTS-2026-07-31.md](TEST-RESULTS-2026-07-31.md) | First formal run. 4 fixed (graded-price leak, orphaned-session lockout, blank `/watchlist`, missing 404 page), 4 reported. Click-driven cases unverified: the browser pane never composited, so all elements measured 0×0. |
+
+### Automated coverage
+
+Two suites are executable; run both against each environment before signing off:
+
+```bash
+npm run audit:data
+```
+
+```bash
+npm run audit:http
+```
+
+`audit:data` covers DATA-*, PRICE-*, and IMG-* against the database.
+`audit:http` covers SMOKE-*, CAT-*, SETS-*, SETD-*, CARD-*, SEAL-*, SEC-*, and
+AUTH-* by sweeping every route in five auth states (it mints session JWTs with
+`SESSION_SECRET`, so it needs no browser or password). Point it at another
+environment with `AUDIT_BASE=http://localhost:3001`. Both exit non-zero on
+failure. Everything else in this document is still a manual check.
 
 ---
 
