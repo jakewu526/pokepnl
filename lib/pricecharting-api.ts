@@ -16,6 +16,11 @@ export type PriceGuideRow = {
   consoleName: string;
   productName: string;
   loosePrice: number | null;
+  // Sealed rows don't consistently populate loose-price -- ~170 of them carry
+  // only a new/CIB figure. Keeping both lets callers fall back rather than
+  // dropping the product entirely.
+  newPrice: number | null;
+  cibPrice: number | null;
   genre: string;
   tcgId: string | null;
   releaseDate: string | null;
@@ -49,6 +54,8 @@ export async function downloadPriceGuide(category: string): Promise<PriceGuideRo
     consoleName: r["console-name"],
     productName: r["product-name"],
     loosePrice: parseDollars(r["loose-price"]),
+    newPrice: parseDollars(r["new-price"]),
+    cibPrice: parseDollars(r["cib-price"]),
     genre: r.genre,
     tcgId: r["tcg-id"] || null,
     releaseDate: r["release-date"] || null,
@@ -183,6 +190,22 @@ export function parseCardNumber(productName: string): ParsedCardName | null {
     hasVariantQualifier: /\[.*?\]/.test(productName),
   };
 }
+
+// PriceCharting files a handful of oversized/jumbo singles under the "Sealed
+// Product" genre ("Mew ex [Jumbo] #205", "Torchic [EX Deck Tin] #17"). They
+// are cards and must stay out of the sealed catalog.
+//
+// Stricter than parseCardNumber on purpose: the trailing token has to contain
+// a digit, and the literal "#None" is excluded. PriceCharting appends "#None"
+// to some genuine sealed products ("Galarian Moltres Tin #None"), which
+// parseCardNumber's \w+ would happily treat as a card number.
+export function isCardLikeProductName(productName: string): boolean {
+  return /#(?!none\b)[A-Za-z]*\d[A-Za-z0-9]*\s*$/i.test(productName);
+}
+
+// The same "#None" junk suffix, for stripping off names that are otherwise
+// real sealed products.
+export const EMPTY_NUMBER_SUFFIX = /\s*#none\s*$/i;
 
 // Zero-padding varies between our data and PriceCharting's for the same
 // card (our "SV001" vs PriceCharting's "SV1", or "004" vs "4") -- comparing

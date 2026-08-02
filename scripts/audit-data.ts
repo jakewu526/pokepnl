@@ -109,14 +109,45 @@ async function main() {
   info("PRICE-06", "cards with no raw MARKET snapshot (show 'No price yet')",
     await count(`SELECT count(*) c FROM "Card" ca WHERE NOT EXISTS (SELECT 1 FROM "PriceSnapshot" ps WHERE ps."cardId"=ca.id AND ps."priceType"='MARKET' AND ps.variant='NORMAL')`));
   info("PRICE-09", "snapshots above $100k", await count(`SELECT count(*) c FROM "PriceSnapshot" WHERE price > 100000`));
+  // The sealed equivalent of PRICE-06, matching what lib/sealed.ts actually
+  // resolves: MARKET/MID/LOW, condition IS NULL, from a sealed price source.
+  // A product failing this renders as "No price yet".
+  //
+  // The floor is high because TCGplayer carries unreleased product months
+  // ahead of release and publishes no price for much of it. Those rows are
+  // legitimately priceless until launch, so this guards against a systemic
+  // regression (a broken join, a wrong condition filter) rather than
+  // demanding full coverage.
+  info("PRICE-12", "sealed products with no resolvable price (mostly unreleased presale)",
+    await count(`SELECT count(*) c FROM "SealedProduct" sp WHERE NOT EXISTS (
+      SELECT 1 FROM "PriceSnapshot" ps WHERE ps."sealedProductId"=sp.id
+        AND ps."priceType" IN ('MARKET','MID','LOW') AND ps.condition IS NULL
+        AND ps.source IN ('TCGPLAYER','PRICECHARTING','EBAY'))`));
+  check("PRICE-12b", "released sealed products (with any snapshot) lacking a resolvable price",
+    await count(`SELECT count(*) c FROM "SealedProduct" sp
+      WHERE EXISTS (SELECT 1 FROM "PriceSnapshot" ps WHERE ps."sealedProductId"=sp.id)
+        AND NOT EXISTS (
+          SELECT 1 FROM "PriceSnapshot" ps WHERE ps."sealedProductId"=sp.id
+            AND ps."priceType" IN ('MARKET','MID','LOW') AND ps.condition IS NULL
+            AND ps.source IN ('TCGPLAYER','PRICECHARTING','EBAY'))`), 0);
+  // A sealed row must never be numbered like a single card -- PriceCharting
+  // files a few jumbo/oversized cards under the "Sealed Product" genre.
+  check("PRICE-13", "sealed products named like a single card (#123)",
+    await count(`SELECT count(*) c FROM "SealedProduct" WHERE name ~ '#[A-Za-z0-9]+\\s*$'`), 0);
 
   console.log("\n== Images ==");
   info("IMG-01", "cards with no imageUrl", await count(`SELECT count(*) c FROM "Card" WHERE "imageUrl" IS NULL`));
-  info("IMG-06", "sealed products with no imageUrl", await count(`SELECT count(*) c FROM "SealedProduct" WHERE "imageUrl" IS NULL`));
+  check("IMG-06", "sealed products with no imageUrl",
+    await count(`SELECT count(*) c FROM "SealedProduct" WHERE "imageUrl" IS NULL`), 150);
   info("IMG-07", "sets with no logoUrl", await count(`SELECT count(*) c FROM "CardSet" WHERE "logoUrl" IS NULL`));
   // Every host here must be listed in next.config.ts remotePatterns, or
   // next/image throws at render time and takes the whole page with it.
-  const ALLOWED = ["images.pokemontcg.io", "images.scrydex.com", "storage.googleapis.com"];
+  const ALLOWED = [
+    "images.pokemontcg.io",
+    "images.scrydex.com",
+    "storage.googleapis.com",
+    "tcgplayer-cdn.tcgplayer.com",
+  ];
   const hosts = await q<{ host: string; c: string }>(`
     SELECT host, sum(c)::text c FROM (
       SELECT split_part(split_part("imageUrl",'://',2),'/',1) host, count(*) c FROM "Card" WHERE "imageUrl" IS NOT NULL GROUP BY 1
@@ -129,7 +160,10 @@ async function main() {
     console.log(`  ${ok ? "PASS" : "FAIL"}  [IMG-02/03] host ${h.host}: ${Number(h.c).toLocaleString()} images${ok ? "" : " NOT IN next.config.ts remotePatterns"}`);
   }
   check("IMG-03", "image URLs not served over https",
-    await count(`SELECT count(*) c FROM "Card" WHERE "imageUrl" IS NOT NULL AND "imageUrl" NOT LIKE 'https://%'`), 0);
+    await count(`SELECT count(*) c FROM (
+      SELECT "imageUrl" u FROM "Card" WHERE "imageUrl" IS NOT NULL
+      UNION ALL SELECT "imageUrl" FROM "SealedProduct" WHERE "imageUrl" IS NOT NULL
+    ) t WHERE u NOT LIKE 'https://%'`), 0);
 
   console.log(`\n${failures === 0 ? "All hard checks passed." : `${failures} CHECK(S) FAILED.`}`);
   process.exitCode = failures === 0 ? 0 : 1;

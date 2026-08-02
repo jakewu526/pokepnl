@@ -84,7 +84,7 @@ type CardHistoryRow = {
 };
 type SealedHistoryRow = {
   sealedProductId: string;
-  source: "PRICECHARTING" | "EBAY";
+  source: "TCGPLAYER" | "PRICECHARTING" | "EBAY";
   price: string;
   capturedDate: Date;
 };
@@ -120,14 +120,17 @@ export async function getWatchlistData(userId: string): Promise<WatchlistData> {
           SELECT "sealedProductId", source, price::text AS price, "capturedDate"
           FROM "PriceSnapshot"
           WHERE "sealedProductId" = ANY(${sealedIds}) AND "priceType" = 'MARKET'
-            AND source IN ('PRICECHARTING', 'EBAY')
+            AND source IN ('TCGPLAYER', 'PRICECHARTING', 'EBAY')
+            -- Ungraded only -- see the matching guard in lib/portfolio.ts.
+            AND condition IS NULL
           ORDER BY "capturedDate" ASC
         `
       : Promise.resolve([]),
   ]);
 
   const cardSeries = buildSeries(cardRows, (r) => r.cardId, "PRICECHARTING");
-  const sealedSeries = buildSeries(sealedRows, (r) => r.sealedProductId, "PRICECHARTING");
+  // Preferred source must track SEALED_PRICE_SOURCES in lib/sealed.ts.
+  const sealedSeries = buildSeries(sealedRows, (r) => r.sealedProductId, "TCGPLAYER");
 
   const addedDateKey = (item: (typeof items)[number]) => item.createdAt.toISOString().slice(0, 10);
 

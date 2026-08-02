@@ -24,7 +24,7 @@ type CardHistoryRow = {
 };
 type SealedHistoryRow = {
   sealedProductId: string;
-  source: "PRICECHARTING" | "EBAY";
+  source: "TCGPLAYER" | "PRICECHARTING" | "EBAY";
   price: string;
   capturedDate: Date;
 };
@@ -58,14 +58,20 @@ export async function getPortfolioData(userId: string): Promise<PortfolioData> {
           SELECT "sealedProductId", source, price::text AS price, "capturedDate"
           FROM "PriceSnapshot"
           WHERE "sealedProductId" = ANY(${sealedIds}) AND "priceType" = 'MARKET'
-            AND source IN ('PRICECHARTING', 'EBAY')
+            AND source IN ('TCGPLAYER', 'PRICECHARTING', 'EBAY')
+            -- Sealed product is never graded; snapshot-prices.ts stores
+            -- TCGplayer's subTypeName in condition, so this keeps a
+            -- "Normal"/"Holofoil" row from being valued as the sealed price.
+            AND condition IS NULL
           ORDER BY "capturedDate" ASC
         `
       : Promise.resolve([]),
   ]);
 
   const cardSeries = buildSeries(cardRows, (r) => r.cardId, "PRICECHARTING");
-  const sealedSeries = buildSeries(sealedRows, (r) => r.sealedProductId, "PRICECHARTING");
+  // Preferred source must track SEALED_PRICE_SOURCES in lib/sealed.ts, or the
+  // portfolio total drifts from the price shown on the product page.
+  const sealedSeries = buildSeries(sealedRows, (r) => r.sealedProductId, "TCGPLAYER");
 
   // Don't backdate value the user didn't have yet -- an item only counts
   // toward the chart from the date it was actually added to the collection,

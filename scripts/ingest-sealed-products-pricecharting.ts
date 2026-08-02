@@ -11,6 +11,7 @@ import {
   tightNormalize,
   resolveOrCreateSet,
   firstErrorLine,
+  isCardLikeProductName,
   FLAT_PROMO_CONSOLE,
   type PriceGuideRow,
   type ConsoleIndex,
@@ -58,16 +59,21 @@ const SUFFIX_BY_TYPE: Record<string, string> = {
   TIN: "Tin",
 };
 
-// A row's raw productName is the only thing that distinguishes real
-// variants of the same type within one set/console -- a plain "Booster Box"
-// gets the clean "<set> Booster Box" name, but "Elite Trainer Box [Pokemon
-// Center]" or "Costco 2-Pack Trainer Box & Booster Bundle" must keep their
-// distinguishing text or they'd collide with (and silently overwrite) the
-// base product under the old one-row-per-type scheme.
+// A row's raw productName is the only thing that distinguishes real variants
+// of the same type within one set/console, so it is kept verbatim unless it
+// is *exactly* the bare type name.
+//
+// Deliberately does NOT strip "[...]" before that comparison: doing so
+// collapsed "Elite Trainer Box [Pokemon Center]" onto the same name as the
+// plain "Elite Trainer Box", so the two rows fought over one name and
+// whichever lost was dropped on the pricechartingId unique constraint. That
+// left 262 products carrying another product's id, image and price.
 function buildName(setName: string | null, type: string, row: PriceGuideRow): string {
   const suffix = SUFFIX_BY_TYPE[type];
-  const bare = row.productName.replace(/\s*\[.*?\]\s*/g, "").trim();
-  const label = suffix && bare.toLowerCase() === suffix.toLowerCase() ? suffix : row.productName;
+  const label =
+    suffix && row.productName.trim().toLowerCase() === suffix.toLowerCase()
+      ? suffix
+      : row.productName;
   return setName ? `${setName} ${label}` : label;
 }
 
@@ -75,18 +81,34 @@ async function upsertSealedProduct(
   setId: string | null,
   name: string,
   type: string,
-  row: PriceGuideRow & { loosePrice: number }
+  row: SealedRow
 ): Promise<"linked" | "created" | "skipped"> {
   try {
+    // The bulk guide carries TCGplayer's own product id on about half its
+    // sealed rows, which makes it a deterministic join onto whatever
+    // ingest-sealed-tcgcsv.ts already created. Matching on it first stops the
+    // two sources from listing the same box twice, and leaves TCGplayer's
+    // cleaner name/image/type in place -- this run only contributes the
+    // pricechartingId (which unlocks the historic price backfill) and today's
+    // price point.
+    const byTcgId = row.tcgId
+      ? await prisma.sealedProduct.findUnique({ where: { tcgplayerProductId: row.tcgId } })
+      : null;
+
     // Prisma's typed compound-unique `where` rejects `null` for a component
     // field, so setId_name can't be used via upsert() when setId is null
     // (flat-promo-console sealed items with no set) -- findFirst + create/
     // update works for both cases.
-    const existing = await prisma.sealedProduct.findFirst({ where: { setId, name } });
+    const existing = byTcgId ?? (await prisma.sealedProduct.findFirst({ where: { setId, name } }));
+
     if (existing) {
       await prisma.sealedProduct.update({
         where: { id: existing.id },
-        data: { pricechartingId: row.pricechartingId, type: type as never },
+        // Only claim the type when this row created the product; a TCGplayer
+        // row already classified it against a richer name.
+        data: byTcgId
+          ? { pricechartingId: row.pricechartingId }
+          : { pricechartingId: row.pricechartingId, type: type as never },
       });
     } else {
       await prisma.sealedProduct.create({
@@ -101,10 +123,10 @@ async function upsertSealedProduct(
       source: "PRICECHARTING",
       priceType: "MARKET",
       condition: null,
-      price: row.loosePrice,
+      price: row.sealedPrice,
     });
 
-    console.log(`  ${name}: $${row.loosePrice.toFixed(2)}`);
+    console.log(`  ${name}: $${row.sealedPrice.toFixed(2)}`);
     return existing ? "linked" : "created";
   } catch (err) {
     // A pricechartingId can occasionally collide with a product already
@@ -115,20 +137,28 @@ async function upsertSealedProduct(
   }
 }
 
+export type SealedRow = PriceGuideRow & { sealedPrice: number };
+
 // Every priced sealed row for a console becomes its own product -- retailer
 // exclusives (Costco, Sam's Club), Pokemon Center variants, theme/battle
 // decks, premium collections, etc. are each genuinely distinct product a
 // collector can buy and resell, not noise to collapse away. The only
 // dedup is exact-productName repeats (shouldn't occur in PriceCharting's
 // export, but guards against double-processing all the same).
-function sealedRowsForConsole(rows: PriceGuideRow[]): (PriceGuideRow & { loosePrice: number })[] {
+function sealedRowsForConsole(rows: PriceGuideRow[]): SealedRow[] {
   const seen = new Set<string>();
-  const result: (PriceGuideRow & { loosePrice: number })[] = [];
+  const result: SealedRow[] = [];
   for (const row of rows) {
-    if (!isSealedGenre(row.genre) || row.loosePrice == null) continue;
+    if (!isSealedGenre(row.genre)) continue;
+    if (isCardLikeProductName(row.productName)) continue;
+    // Sealed rows are inconsistent about which column carries the price;
+    // ~170 populate only new/CIB. Falling back keeps those products instead
+    // of dropping them for having an empty loose-price.
+    const sealedPrice = row.loosePrice ?? row.newPrice ?? row.cibPrice;
+    if (sealedPrice == null) continue;
     if (seen.has(row.productName)) continue;
     seen.add(row.productName);
-    result.push({ ...row, loosePrice: row.loosePrice });
+    result.push({ ...row, sealedPrice });
   }
   return result;
 }

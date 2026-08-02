@@ -9,6 +9,9 @@ const nextConfig: NextConfig = {
       new URL("https://images.scrydex.com/**"),
       // PriceCharting's image CDN, used for sealed-product photos.
       new URL("https://storage.googleapis.com/images.pricecharting.com/**"),
+      // TCGplayer's product CDN -- the image source for most sealed product
+      // (see lib/tcgcsv.ts).
+      new URL("https://tcgplayer-cdn.tcgplayer.com/**"),
     ],
   },
 };

@@ -40,6 +40,19 @@ export function SealedProductTile({
         </div>
 
         <div className="flex flex-1 flex-col gap-1 border-t border-line px-3 py-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {/* The type is what separates a $315 display case from the $31
+                single tin sharing its name -- worth showing on the tile, not
+                just on the detail page. */}
+            <span className="rounded-full bg-line/60 px-2 py-0.5 font-data text-[10px] uppercase tracking-wide text-ink-muted">
+              {SEALED_TYPE_LABELS[product.type]}
+            </span>
+            {product.language === "JA" && (
+              <span className="rounded-full bg-amber/20 px-2 py-0.5 font-data text-[10px] uppercase tracking-wide text-ink-muted">
+                JP
+              </span>
+            )}
+          </div>
           <h2 className="font-body text-[15px] font-semibold leading-snug text-ink">
             {product.name}
           </h2>

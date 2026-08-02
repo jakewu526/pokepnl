@@ -12,7 +12,15 @@ export type SealedProductType =
   | "BLISTER"
   | "COLLECTION_BOX"
   | "TIN"
-  | "OTHER";
+  | "OTHER"
+  | "PREMIUM_COLLECTION"
+  | "DISPLAY_CASE"
+  | "DECK"
+  | "POSTER_COLLECTION"
+  | "PIN_COLLECTION"
+  | "GIFT_BOX"
+  | "BINDER"
+  | "STARTER_SET";
 
 export const SEALED_TYPE_LABELS: Record<SealedProductType, string> = {
   BOOSTER_BOX: "Booster Box",
@@ -23,16 +31,38 @@ export const SEALED_TYPE_LABELS: Record<SealedProductType, string> = {
   COLLECTION_BOX: "Collection Box",
   TIN: "Tin",
   OTHER: "Sealed Product",
+  PREMIUM_COLLECTION: "Premium Collection",
+  // A retail case holding many of a smaller product -- kept distinct from TIN
+  // so a ~$315 case of ten mini tins doesn't read like a ~$31 single tin.
+  DISPLAY_CASE: "Display Case",
+  DECK: "Deck",
+  POSTER_COLLECTION: "Poster Collection",
+  PIN_COLLECTION: "Pin Collection",
+  GIFT_BOX: "Gift Box",
+  BINDER: "Binder",
+  STARTER_SET: "Starter Set",
 };
+
+// Ordered best-first. TCGplayer's market price is what sealed actually
+// changes hands at, so it outranks PriceCharting -- whose sealed "loose"
+// figure tracks a thinner, higher-priced sample (a 151 ETB reads ~$150 on
+// TCGplayer against $528 on PriceCharting).
+export const SEALED_PRICE_SOURCES = ["TCGPLAYER", "PRICECHARTING", "EBAY"] as const;
+export type SealedPriceSource = (typeof SEALED_PRICE_SOURCES)[number];
+
+function betterSource(a: SealedPriceSource, b: SealedPriceSource): SealedPriceSource {
+  return SEALED_PRICE_SOURCES.indexOf(a) <= SEALED_PRICE_SOURCES.indexOf(b) ? a : b;
+}
 
 export type SealedProductListItem = {
   id: string;
   name: string;
   type: SealedProductType;
   imageUrl: string | null;
+  language: string;
   setName: string | null;
   price: number | null;
-  priceSource: "PRICECHARTING" | "EBAY" | null;
+  priceSource: SealedPriceSource | null;
 };
 
 export type SealedProductSearchResult = {
@@ -47,13 +77,29 @@ export async function getSealedCatalogStats(): Promise<{ productCount: number }>
   return { productCount };
 }
 
+export type SealedFilters = { type?: string; language?: string };
+
 export async function searchSealedProducts(
   query: string,
-  page: number
+  page: number,
+  filters: SealedFilters = {}
 ): Promise<SealedProductSearchResult> {
-  const where = query.trim()
-    ? { name: { contains: query.trim(), mode: "insensitive" as const } }
-    : {};
+  const q = query.trim();
+  const where = {
+    // Searching the set name as well as the product name matters now that
+    // TCGplayer names don't always repeat the set ("Poke Ball with Two Mini
+    // Tins") -- mirrors the multi-field search in lib/cards.ts.
+    ...(q
+      ? {
+          OR: [
+            { name: { contains: q, mode: "insensitive" as const } },
+            { set: { name: { contains: q, mode: "insensitive" as const } } },
+          ],
+        }
+      : {}),
+    ...(filters.type ? { type: filters.type as never } : {}),
+    ...(filters.language ? { language: filters.language } : {}),
+  };
 
   const [total, products] = await Promise.all([
     prisma.sealedProduct.count({ where }),
@@ -67,6 +113,7 @@ export async function searchSealedProducts(
         name: true,
         type: true,
         imageUrl: true,
+        language: true,
         set: { select: { name: true } },
       },
     }),
@@ -85,6 +132,7 @@ export async function searchSealedProducts(
         name: p.name,
         type: p.type as SealedProductType,
         imageUrl: p.imageUrl,
+        language: p.language,
         setName: p.set?.name ?? null,
         price: priceInfo?.price ?? null,
         priceSource: priceInfo?.source ?? null,
@@ -101,12 +149,12 @@ export type SealedProductDetail = {
   setName: string | null;
   setSeries: string | null;
   price: number | null;
-  priceSource: "PRICECHARTING" | "EBAY" | null;
+  priceSource: SealedPriceSource | null;
   history: PricePoint[];
 };
 
 type SealedHistoryRow = {
-  source: "PRICECHARTING" | "EBAY";
+  source: SealedPriceSource;
   price: string;
   capturedDate: Date;
 };
@@ -128,12 +176,16 @@ export async function getSealedProductDetail(id: string): Promise<SealedProductD
     SELECT source, price::text AS price, "capturedDate"
     FROM "PriceSnapshot"
     WHERE "sealedProductId" = ${id} AND "priceType" = 'MARKET'
-      AND source IN ('PRICECHARTING', 'EBAY')
+      AND source IN ('TCGPLAYER', 'PRICECHARTING', 'EBAY')
+      -- Sealed product is never graded. snapshot-prices.ts writes TCGplayer's
+      -- subTypeName into the condition column, so without this guard a
+      -- "Normal"/"Holofoil" row could be charted as the sealed price.
+      AND condition IS NULL
     ORDER BY "capturedDate" ASC
   `;
 
   let history: PricePoint[] = [];
-  let priceSource: "PRICECHARTING" | "EBAY" | null = null;
+  let priceSource: SealedPriceSource | null = null;
 
   if (rows.length > 0) {
     const last = rows[rows.length - 1];
@@ -141,7 +193,7 @@ export async function getSealedProductDetail(id: string): Promise<SealedProductD
     const lastDayRows = rows.filter(
       (r) => r.capturedDate.toISOString().slice(0, 10) === lastDateKey
     );
-    const chosen = lastDayRows.find((r) => r.source === "PRICECHARTING") ?? last;
+    const chosen = lastDayRows.reduce((best, r) => (betterSource(r.source, best.source) === r.source ? r : best), last);
     priceSource = chosen.source;
 
     history = rows
@@ -155,7 +207,18 @@ export async function getSealedProductDetail(id: string): Promise<SealedProductD
     history = densifyHistory(history, id);
   }
 
-  const price = history.length > 0 ? history[history.length - 1].price : null;
+  let price = history.length > 0 ? history[history.length - 1].price : null;
+
+  // No MARKET history at all (presale product with only a preorder ask) --
+  // fall back to the same resolver the grid uses so the two never disagree.
+  // The chart stays empty; there's no series worth drawing from one point.
+  if (price == null) {
+    const fallback = (await getLatestSealedPrices([id])).get(id);
+    if (fallback) {
+      price = fallback.price;
+      priceSource = fallback.source;
+    }
+  }
 
   return {
     id: product.id,
@@ -170,28 +233,54 @@ export async function getSealedProductDetail(id: string): Promise<SealedProductD
   };
 }
 
-type LatestSealedPriceRow = { sealedProductId: string; source: "PRICECHARTING" | "EBAY"; price: string };
+// Preference order for which figure represents "the" price. MARKET is the
+// real trade price; MID/LOW only get used for product TCGplayer lists but has
+// no sales for yet -- overwhelmingly presale boxes, where the preorder ask is
+// far more useful to a reseller than showing "No price yet".
+const SEALED_PRICE_TYPES = ["MARKET", "MID", "LOW"] as const;
+type SealedPriceType = (typeof SEALED_PRICE_TYPES)[number];
+
+type LatestSealedPriceRow = {
+  sealedProductId: string;
+  source: SealedPriceSource;
+  priceType: SealedPriceType;
+  price: string;
+};
+
+// Lower is better on both axes; source dominates, price type breaks the tie.
+function rank(row: { source: SealedPriceSource; priceType: SealedPriceType }): number {
+  return SEALED_PRICE_SOURCES.indexOf(row.source) * 10 + SEALED_PRICE_TYPES.indexOf(row.priceType);
+}
 
 export async function getLatestSealedPrices(
   productIds: string[]
-): Promise<Map<string, { price: number; source: "PRICECHARTING" | "EBAY" }>> {
+): Promise<Map<string, { price: number; source: SealedPriceSource }>> {
   if (productIds.length === 0) return new Map();
 
-  // Latest MARKET-type snapshot per (product, source); prefer PriceCharting
-  // over eBay when both are available.
+  // Latest snapshot per (product, source, type), resolved by `rank`. The
+  // source restriction and the condition guard must mirror
+  // getSealedProductDetail exactly, or a product's list price and its
+  // detail-page price can disagree.
   const rows = await prisma.$queryRaw<LatestSealedPriceRow[]>`
-    SELECT DISTINCT ON ("sealedProductId", source) "sealedProductId", source, price::text AS price
+    SELECT DISTINCT ON ("sealedProductId", source, "priceType")
+           "sealedProductId", source, "priceType", price::text AS price
     FROM "PriceSnapshot"
-    WHERE "sealedProductId" = ANY(${productIds}) AND "priceType" = 'MARKET'
-    ORDER BY "sealedProductId", source, "capturedDate" DESC
+    WHERE "sealedProductId" = ANY(${productIds})
+      AND "priceType" IN ('MARKET', 'MID', 'LOW')
+      AND source IN ('TCGPLAYER', 'PRICECHARTING', 'EBAY')
+      AND condition IS NULL
+    ORDER BY "sealedProductId", source, "priceType", "capturedDate" DESC
   `;
 
-  const map = new Map<string, { price: number; source: "PRICECHARTING" | "EBAY" }>();
+  const best = new Map<string, LatestSealedPriceRow>();
   for (const row of rows) {
-    const existing = map.get(row.sealedProductId);
-    if (!existing || row.source === "PRICECHARTING") {
-      map.set(row.sealedProductId, { price: parseFloat(row.price), source: row.source });
-    }
+    const existing = best.get(row.sealedProductId);
+    if (!existing || rank(row) < rank(existing)) best.set(row.sealedProductId, row);
+  }
+
+  const map = new Map<string, { price: number; source: SealedPriceSource }>();
+  for (const [id, row] of best) {
+    map.set(id, { price: parseFloat(row.price), source: row.source });
   }
   return map;
 }

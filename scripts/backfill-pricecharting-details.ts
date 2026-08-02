@@ -22,17 +22,18 @@ type Target = {
   pricechartingId: string;
   entityField: "cardId" | "sealedProductId";
   label: string;
+  needsImage: boolean;
 };
 
 async function loadTargets(force: boolean): Promise<Target[]> {
   const [cards, sealedProducts] = await Promise.all([
     prisma.card.findMany({
       where: { pricechartingId: { not: null } },
-      select: { id: true, pricechartingId: true, name: true, number: true, set: { select: { name: true } } },
+      select: { id: true, pricechartingId: true, name: true, number: true, imageUrl: true, set: { select: { name: true } } },
     }),
     prisma.sealedProduct.findMany({
       where: { pricechartingId: { not: null } },
-      select: { id: true, pricechartingId: true, name: true },
+      select: { id: true, pricechartingId: true, name: true, imageUrl: true },
     }),
   ]);
 
@@ -41,12 +42,14 @@ async function loadTargets(force: boolean): Promise<Target[]> {
     pricechartingId: c.pricechartingId!,
     entityField: "cardId",
     label: `${c.set.name} - ${c.name} #${c.number}`,
+    needsImage: c.imageUrl == null,
   }));
   const sealedTargets: Target[] = sealedProducts.map((p) => ({
     id: p.id,
     pricechartingId: p.pricechartingId!,
     entityField: "sealedProductId",
     label: p.name,
+    needsImage: p.imageUrl == null,
   }));
   const all = [...cardTargets, ...sealedTargets];
 
@@ -89,7 +92,12 @@ async function loadTargets(force: boolean): Promise<Target[]> {
     ...oldGradedCardSnapshots.map((s) => s.cardId),
   ]);
 
-  return all.filter((t) => !alreadyBackfilled.has(t.id));
+  // A missing image always re-qualifies a target regardless of snapshot age.
+  // repair-sealed-products.ts clears imageUrl on rows it renames (their old
+  // image belonged to a different product) but leaves their price history
+  // intact -- so the "has old snapshots" test alone would mark them done and
+  // they'd stay imageless forever.
+  return all.filter((t) => t.needsImage || !alreadyBackfilled.has(t.id));
 }
 
 async function processTarget(target: Target): Promise<"ok" | "no-match" | "error"> {

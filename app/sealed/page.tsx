@@ -7,19 +7,22 @@ import { SealedProductTile } from "@/components/SealedProductTile";
 import { SealedPagination } from "@/components/SealedPagination";
 import { AuthNav } from "@/components/AuthNav";
 import { CatalogNav } from "@/components/CatalogNav";
+import { SealedFilterBar } from "@/components/SealedFilterBar";
 
 export default async function SealedPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; type?: string; lang?: string }>;
 }) {
   const params = await searchParams;
   const query = params.q ?? "";
   const page = Math.max(1, Number(params.page) || 1);
+  const type = params.type ?? "";
+  const language = params.lang ?? "";
 
   const [{ productCount }, results, user] = await Promise.all([
     getSealedCatalogStats(),
-    searchSealedProducts(query, page),
+    searchSealedProducts(query, page, { type, language }),
     getCurrentUser(),
   ]);
   const watchedIds = await getWatchlistedSealedIds(
@@ -56,6 +59,8 @@ export default async function SealedPage({
           <Suspense fallback={<div className="h-12 rounded-full border border-line bg-paper-raised" />}>
             <SearchBar initialQuery={query} />
           </Suspense>
+
+          <SealedFilterBar query={query} type={type} language={language} />
         </div>
       </header>
 
@@ -85,14 +90,20 @@ export default async function SealedPage({
               ))}
             </div>
             <div className="mt-8">
-              <SealedPagination query={query} page={results.page} pageCount={results.pageCount} />
+              <SealedPagination
+                query={query}
+                page={results.page}
+                pageCount={results.pageCount}
+                type={type}
+                language={language}
+              />
             </div>
           </>
         )}
       </main>
 
       <footer className="border-t border-line px-4 py-4 text-center font-data text-xs text-ink-muted sm:px-6">
-        Prices from PriceCharting and eBay, captured daily · {SEALED_PAGE_SIZE} products per page
+        Prices from TCGplayer, PriceCharting and eBay, captured daily · {SEALED_PAGE_SIZE} products per page
       </footer>
     </div>
   );

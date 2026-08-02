@@ -285,6 +285,33 @@ Keep these three states available. Several bugs only appear in one of them.
 | SEAL-11 | Invalid sealed id | 404 |
 | SEAL-12 | Japanese sealed products | present, priced |
 
+### Catalog completeness & correctness (added 2026-08-02)
+
+The sealed catalog is sourced primarily from TCGplayer via the keyless
+tcgcsv.com mirror (`lib/tcgcsv.ts`), with PriceCharting supplying price history
+and the products TCGplayer doesn't list. Both sources describe the same product
+under different names, so identity bugs are the main regression risk here.
+
+| ID | Case | Expected |
+|---|---|---|
+| SEAL-20 | Total sealed count | ≥ 3,800; a large drop means a merge phase over-matched |
+| SEAL-21 | Product name matches the product its `pricechartingId` points at | 0 mismatches (`npm run repair:sealed` reports 0 renames on a clean DB) |
+| SEAL-22 | No sealed row is named like a single card (`#205`) | audit PRICE-13 = 0 |
+| SEAL-23 | Retailer exclusives present | Costco and Sam's Club products searchable (e.g. "Sam's Club" returns ≥ 8) |
+| SEAL-24 | Pokémon Center exclusives distinct from the base product | e.g. `151 Elite Trainer Box` and the Pokémon Center ETB are separate rows with different prices/images |
+| SEAL-25 | Display cases distinguished from their contents | `Ascended Heroes Mini Tin Display` is `DISPLAY_CASE` (~$326) and separate from `Mini Tin [Pikachu & Tepig]` (~$34) |
+| SEAL-26 | Every tin/collection variant of a set is listed, not one per type | 151 and Ascended Heroes both list all variants |
+| SEAL-27 | Type filter pills (`?type=`) | filter correctly; selection survives paging |
+| SEAL-28 | Language filter (`?lang=EN` / `JA`) | filters; JP tiles show the `JP` badge |
+| SEAL-29 | Type badge on tile | shows for every product, not just imageless ones |
+| SEAL-30 | List price == detail price for the same product | always equal (shared resolver in `lib/sealed.ts`) |
+| SEAL-31 | Price source cascade | TCGplayer market preferred over PriceCharting over eBay |
+| SEAL-32 | Presale product with no market price | shows its preorder MID/LOW price, not "No price yet" |
+| SEAL-33 | Released product lacking a resolvable price | audit PRICE-12b = 0 |
+| SEAL-34 | Sealed images load from `tcgplayer-cdn.tcgplayer.com` | host listed in `next.config.ts` remotePatterns; no 4xx in console |
+| SEAL-35 | Re-running the ingest/repair scripts | idempotent — no duplicates created, no names flip-flopping between runs |
+| SEAL-36 | Collection/transaction rows survive a repair run | the repair never deletes a product carrying user data |
+
 ---
 
 # Suite 9 — Watchlist (WATCH)
@@ -549,3 +576,4 @@ failure. Everything else in this document is still a manual check.
 | Date | Change |
 |---|---|
 | 2026-07-31 | Created. Covers every feature through commit `c7794d2`. |
+| 2026-08-02 | Added SEAL-20…36 for the TCGplayer-sourced sealed catalog (identity, dedup, type taxonomy, price cascade, filters). |

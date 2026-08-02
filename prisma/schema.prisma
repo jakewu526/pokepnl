@@ -128,6 +128,14 @@ enum SealedProductType {
   COLLECTION_BOX
   TIN
   OTHER
+  PREMIUM_COLLECTION
+  DISPLAY_CASE
+  DECK
+  POSTER_COLLECTION
+  PIN_COLLECTION
+  GIFT_BOX
+  BINDER
+  STARTER_SET
 }
 
 model SealedProduct {
@@ -137,7 +145,12 @@ model SealedProduct {
   type               SealedProductType
   imageUrl           String?
   tcgplayerProductId String?           @unique
+  tcgplayerGroupId   String?
   pricechartingId    String?           @unique
+  // "EN" | "JA". Sealed value diverges sharply between the English and
+  // Japanese print of the same set, so the two are tracked as separate
+  // products rather than merged.
+  language           String            @default("EN")
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
@@ -149,6 +162,8 @@ model SealedProduct {
 
   @@unique([setId, name])
   @@index([name])
+  @@index([type])
+  @@index([language])
 }
 
 enum PriceSource {

@@ -64,7 +64,11 @@ async function snapshotEntities(
       entityField,
       source: "TCGPLAYER",
       priceType: "MARKET",
-      condition: price.subTypeName,
+      // subTypeName describes a card's printing ("Normal", "Holofoil"), which
+      // is meaningless for a sealed box -- and the sealed price queries in
+      // lib/sealed.ts only read condition IS NULL rows, so writing it here
+      // would make the snapshot invisible to every sealed price lookup.
+      condition: entityField === "sealedProductId" ? null : price.subTypeName,
       price: price.marketPrice,
       capturedAt,
     });
