@@ -100,6 +100,57 @@ async function mergeCrossSourceDuplicates(
   return merged;
 }
 
+// The tcg-id join above only catches pairs PriceCharting knows a TCGplayer id
+// for. The rest show up as two rows in one set whose names differ only in
+// punctuation or case -- "151: Alakazam ex Collection" (TCGplayer) beside
+// "151 Alakazam EX Collection" (PriceCharting). Collapsing on a
+// punctuation-and-case-insensitive key catches those.
+async function mergeNormalizedNameDuplicates(apply: boolean): Promise<number> {
+  const groups = await prisma.$queryRaw<{ setId: string | null; ids: string[] }[]>`
+    SELECT "setId", array_agg(id ORDER BY id) AS ids
+    FROM "SealedProduct"
+    GROUP BY "setId", lower(regexp_replace(name, '[^a-zA-Z0-9]', '', 'g'))
+    HAVING count(*) > 1`;
+
+  let merged = 0;
+  for (const group of groups) {
+    const rows = await prisma.sealedProduct.findMany({ where: { id: { in: group.ids } } });
+    if (rows.length < 2) continue;
+
+    // TCGplayer's row wins: better-formed name, a real image, and a market
+    // price. User data outranks even that, so nothing owned gets deleted.
+    const usage = await Promise.all(rows.map((r) => userDataCounts(r.id)));
+    const scored = rows.map((r, i) => ({
+      row: r,
+      score: (usage[i].hasUserData ? 2 : 0) + (r.tcgplayerProductId ? 1 : 0),
+    }));
+    scored.sort((a, b) => b.score - a.score);
+    const winner = scored[0].row;
+    const losers = scored.slice(1).map((s) => s.row);
+
+    console.log(`  DUPE    "${winner.name}"`);
+    for (const l of losers) console.log(`            absorbs "${l.name}"`);
+    if (!apply) { merged += losers.length; continue; }
+
+    for (const loser of losers) {
+      try {
+        const inheritedPcId = winner.pricechartingId ?? loser.pricechartingId;
+        await mergeInto(winner.id, loser.id);
+        if (!winner.pricechartingId && inheritedPcId) {
+          await prisma.sealedProduct.update({
+            where: { id: winner.id },
+            data: { pricechartingId: inheritedPcId },
+          });
+        }
+        merged += 1;
+      } catch (err) {
+        console.log(`    failed: ${firstErrorLine(err)}`);
+      }
+    }
+  }
+  return merged;
+}
+
 // Sealed rows created before the ingest learned to reject card-shaped names.
 // Jumbo/oversized singles get removed outright (they are cards); the "#None"
 // suffix PriceCharting appends to some genuine products is just trimmed.
@@ -213,6 +264,11 @@ async function main() {
   console.log("Phase 1: folding together products both sources created separately...");
   const crossMerged = await mergeCrossSourceDuplicates(guide, apply);
   console.log(`  ${crossMerged} cross-source duplicates merged\n`);
+  console.log("Phase 1b: folding rows that differ only in punctuation/case...");
+  const nameDupes = await mergeNormalizedNameDuplicates(apply);
+  console.log(`  ${nameDupes} near-duplicate rows merged
+`);
+
   console.log("Phase 2: removing card-shaped rows from the sealed catalog...");
   const cardLike = await cleanCardLikeNames(apply);
   console.log(`  ${cardLike.deleted} deleted, ${cardLike.trimmed} name suffixes trimmed\n`);
@@ -258,7 +314,12 @@ async function main() {
     // would otherwise feed this row the wrong image and price history. The
     // next PriceCharting run re-links it correctly via tcg-id.
     if (row.tcgplayerProductId) {
-      if (guideRow.tcgId === row.tcgplayerProductId) { c.unchanged += 1; continue; }
+      // Detach only when the guide positively says this pricechartingId belongs
+      // to a *different* TCGplayer product. A null tcg-id means PriceCharting
+      // simply doesn't record one -- which is exactly the case the name-based
+      // merge in phase 1b links by hand, so dropping it here would undo that
+      // every run.
+      if (!guideRow.tcgId || guideRow.tcgId === row.tcgplayerProductId) { c.unchanged += 1; continue; }
       console.log(`  DETACH  "${row.name}"\n            pcId ${row.pricechartingId} is really "${guideRow.productName}"`);
       if (apply) {
         await prisma.sealedProduct.update({ where: { id: row.id }, data: { pricechartingId: null } });

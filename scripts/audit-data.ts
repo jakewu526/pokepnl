@@ -144,6 +144,54 @@ async function main() {
   check("PRICE-13", "sealed products named like a single card (#123)",
     await count(`SELECT count(*) c FROM "SealedProduct" WHERE name ~ '#[A-Za-z0-9]+\\s*$'`), 0);
 
+  console.log("\n== Sealed catalog ==");
+  const sealedTotal = await count(`SELECT count(*) c FROM "SealedProduct"`);
+  const sealedOk = sealedTotal >= 3500;
+  if (!sealedOk) failures++;
+  console.log(`  ${sealedOk ? "PASS" : "FAIL"}  [SEAL-20] sealed products: ${sealedTotal.toLocaleString()} (fails below 3,500)`);
+
+  // SEAL-23: retailer exclusives are a headline reason the catalog was rebuilt
+  // on TCGplayer -- PriceCharting listed almost none of them.
+  for (const [id, retailer, floor] of [["SEAL-23", "Costco", 10], ["SEAL-23", "Sam''s Club", 5]] as const) {
+    const n = await count(`SELECT count(*) c FROM "SealedProduct" WHERE name ILIKE '%${retailer}%'`);
+    const ok = n >= floor;
+    if (!ok) failures++;
+    console.log(`  ${ok ? "PASS" : "FAIL"}  [${id}] ${retailer.replace("''", "'")} products: ${n} (fails below ${floor})`);
+  }
+
+  // SEAL-26: the old importer kept one product per type per set, so a set
+  // showing a single tin is the signature of that regression returning.
+  const variantSets = await q<{ name: string; tins: string }>(`
+    SELECT cs.name, count(*)::text tins FROM "SealedProduct" s JOIN "CardSet" cs ON cs.id=s."setId"
+    WHERE cs.name IN ('151','Ascended Heroes') AND s.type IN ('TIN','DISPLAY_CASE','COLLECTION_BOX','PREMIUM_COLLECTION')
+    GROUP BY cs.name ORDER BY cs.name`);
+  for (const v of variantSets) {
+    const ok = Number(v.tins) >= 8;
+    if (!ok) failures++;
+    console.log(`  ${ok ? "PASS" : "FAIL"}  [SEAL-26] "${v.name}" tin/collection variants: ${v.tins} (fails below 8)`);
+  }
+
+  // SEAL-24: a Pokemon Center exclusive must be its own row, not fused onto
+  // the base product -- the collision that gave 262 products the wrong price.
+  check("SEAL-24", "sets holding a Pokemon Center variant but no base product", await count(`
+    SELECT count(*) c FROM "SealedProduct" pc
+    WHERE pc.name ILIKE '%pokemon center%' AND pc.type = 'ELITE_TRAINER_BOX'
+      AND NOT EXISTS (SELECT 1 FROM "SealedProduct" b WHERE b."setId" = pc."setId"
+        AND b.type = 'ELITE_TRAINER_BOX' AND b.name NOT ILIKE '%pokemon center%')`), 0);
+
+  // SEAL-35: two rows for one product, spotted via a shared external id.
+  check("SEAL-35", "duplicate sealed rows sharing a tcgplayerProductId",
+    await count(`SELECT count(*) c FROM (SELECT "tcgplayerProductId" FROM "SealedProduct"
+      WHERE "tcgplayerProductId" IS NOT NULL GROUP BY 1 HAVING count(*)>1) t`), 0);
+  info("SEAL-25", "display cases (distinguished from their contents)",
+    await count(`SELECT count(*) c FROM "SealedProduct" WHERE type='DISPLAY_CASE'`));
+  info("SEAL-28", "Japanese sealed products",
+    await count(`SELECT count(*) c FROM "SealedProduct" WHERE language='JA'`));
+  info("SEAL-20", "card-less sets holding sealed product (TCGplayer-only groupings)",
+    await count(`SELECT count(*) c FROM "CardSet" cs
+      WHERE NOT EXISTS (SELECT 1 FROM "Card" c WHERE c."setId"=cs.id)
+        AND EXISTS (SELECT 1 FROM "SealedProduct" s WHERE s."setId"=cs.id)`));
+
   console.log("\n== Images ==");
   info("IMG-01", "cards with no imageUrl", await count(`SELECT count(*) c FROM "Card" WHERE "imageUrl" IS NULL`));
   // ~93% coverage. The rest are products TCGplayer lists with imageCount 0

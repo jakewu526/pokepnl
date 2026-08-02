@@ -9,6 +9,12 @@ import { prisma } from "@/lib/prisma";
 //   npm run audit:http                                  (prod, :3000)
 //   AUDIT_BASE=http://localhost:3001 npm run audit:http (uat)
 //
+// Run it from the checkout whose .env points at the same environment's
+// database: the script picks target ids out of the DB and then requests them
+// over HTTP, so a prod-checkout DB with AUDIT_BASE aimed at UAT asks for ids
+// that don't exist there and every detail-page assertion fails misleadingly.
+// The DB/URL consistency check in main() catches that before the sweep runs.
+//
 // Signed-in states are exercised by minting a session JWT with the same
 // SESSION_SECRET the app uses, so no browser or password is needed.
 
@@ -88,6 +94,26 @@ async function hit(id: string, path: string, expect: Expect = {}, cookie = "") {
 async function main() {
   console.log(`Binder HTTP audit — ${BASE} — ${new Date().toISOString()}\n`);
 
+  // Cheapest possible proof that this checkout's database is the one serving
+  // BASE: pick a sealed product by id here, ask the server for it, and see if
+  // it knows the name. If not, every id-driven assertion below would fail for
+  // the wrong reason.
+  const [probe] = await prisma.$queryRawUnsafe<{ id: string; name: string }[]>(
+    `SELECT id, name FROM "SealedProduct" ORDER BY id LIMIT 1`
+  );
+  const probeBody = strip(await (await fetch(`${BASE}/sealed/${probe.id}`)).text());
+  if (!probeBody.includes(probe.name)) {
+    console.log(
+      `  FAIL  [ENV] ${BASE} does not serve this checkout's database — ` +
+        `"${probe.name}" (${probe.id}) is unknown to it.\n` +
+        `        Run this from the checkout whose .env matches AUDIT_BASE.`
+    );
+    failures++;
+    console.log(`\n1 CHECK FAILED.`);
+    process.exitCode = 1;
+    return;
+  }
+
   console.log("== SMOKE: signed out ==");
   await hit("SMOKE-01", "/", { status: 200, bodyIncludes: "result" });
   await hit("SETS-01", "/?view=sets", { status: 200 });
@@ -153,6 +179,50 @@ async function main() {
   const [sealed] = await pick(`SELECT id, name FROM "SealedProduct" WHERE "imageUrl" IS NOT NULL LIMIT 1`);
   await hit("SEAL-06", `/sealed/${sealed.id}`, { status: 200, bodyIncludes: sealed.name });
   await hit("SEAL-11", "/sealed/not-a-real-id", { rawIncludes: NOT_FOUND_MARKER });
+
+  console.log("\n== Sealed catalog (SEAL-20..36) ==");
+  // Filters are plain links, so a broken one shows up as the unfiltered count
+  // rather than an error -- assert on a type label the filter should surface.
+  await hit("SEAL-27", "/sealed?type=DISPLAY_CASE", { status: 200, bodyIncludes: "Display Case" });
+  await hit("SEAL-27", "/sealed?type=PREMIUM_COLLECTION", { status: 200, bodyIncludes: "Premium Collection" });
+  await hit("SEAL-28", "/sealed?lang=JA", { status: 200, bodyIncludes: "Japanese" });
+  await hit("SEAL-27", "/sealed?type=NOT_A_TYPE", { status: 200 });
+  await hit("SEAL-28", "/sealed?lang=XX", { status: 200 });
+  // Filters must survive paging or page 2 silently drops them.
+  await hit("SEAL-27", "/sealed?type=TIN&page=2", { status: 200, rawIncludes: "type=TIN" });
+  await hit("SEAL-23", `/sealed?q=${encodeURIComponent("Sam's Club")}`, { status: 200, bodyIncludes: "Sam's Club" });
+  await hit("SEAL-23", "/sealed?q=Costco", { status: 200, bodyIncludes: "Costco" });
+  // Set-name search: TCGplayer product names don't always repeat the set.
+  await hit("SEAL-03", "/sealed?q=Ascended+Heroes", { status: 200, bodyIncludes: "Ascended Heroes" });
+
+  // SEAL-30: the grid and the detail page must agree. Both read the same
+  // resolver, but they are separate queries -- a divergence here is the exact
+  // class of bug that made list and detail prices disagree before.
+  const priced = await pick(`
+    SELECT sp.id, sp.name FROM "SealedProduct" sp
+    WHERE EXISTS (SELECT 1 FROM "PriceSnapshot" ps WHERE ps."sealedProductId"=sp.id
+      AND ps."priceType"='MARKET' AND ps.condition IS NULL)
+    ORDER BY sp.name LIMIT 3`);
+  for (const p of priced) {
+    const detail = strip(await (await fetch(`${BASE}/sealed/${p.id}`)).text());
+    const grid = strip(await (await fetch(`${BASE}/sealed?q=${encodeURIComponent(p.name)}`)).text());
+    const money = /\$[\d,]+\.\d{2}/;
+    const detailPrice = detail.match(money)?.[0];
+    const gridPrice = grid.match(money)?.[0];
+    const ok = detailPrice != null && detailPrice === gridPrice;
+    if (!ok) failures++;
+    console.log(`  ${ok ? "PASS" : "FAIL"}  [SEAL-30] "${p.name}" grid ${gridPrice} vs detail ${detailPrice}`);
+  }
+
+  // SEAL-34: every sealed image host must be in next.config.ts remotePatterns,
+  // or next/image 400s and the tile renders broken.
+  const hosts = await pick(`SELECT DISTINCT split_part(split_part("imageUrl",'://',2),'/',1) host
+    FROM "SealedProduct" WHERE "imageUrl" IS NOT NULL`);
+  for (const { host } of hosts) {
+    const [sample] = await pick(`SELECT "imageUrl" u FROM "SealedProduct"
+      WHERE "imageUrl" LIKE 'https://${host}/%' LIMIT 1`);
+    await hit("SEAL-34", `/_next/image?url=${encodeURIComponent(sample.u)}&w=384&q=75`, { status: 200 });
+  }
 
   // Chunk filenames are content-hashed, so `npm run build` against a checkout
   // whose service is still running swaps the files out from under it: the live
