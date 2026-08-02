@@ -41,8 +41,8 @@ added to the plan for that work and are now automated rather than manual.
 
 | Metric | Before (2026-07-31) | Now |
 |---|---|---|
-| Sealed products | 997 | **3,840** |
-| With a working image | — | 92.3% |
+| Sealed products | 997 | **3,846** |
+| With a working image | — | 97.2% |
 | Japanese | ~0 tracked separately | 307 |
 | Costco products | 0 | 17 |
 | Sam's Club products | 0 | 9 |
@@ -92,10 +92,17 @@ UAT for ids that only exist in dev. The script now proves the database and
   boxes; TCGplayer lists them months ahead of release with no market price.
   Where a preorder MID/LOW price exists it is shown instead of hiding the
   product. PRICE-12b asserts that *released* product always resolves a price.
-- **295 sealed products have no image.** TCGplayer reports `imageCount: 0` for
-  them (its CDN 403s the URL at every size) and they have no PriceCharting page
-  to scrape instead. These render the type-label placeholder, which is intended.
-  IMG-06 fails above 400 to catch a systemic loss.
+- **108 sealed products have no image** (97.2% coverage). TCGplayer reports
+  `imageCount: 0` for them (its CDN 403s the URL at every size) and PriceCharting
+  either has no page or no photo on it. These render the type-label placeholder,
+  which is intended. IMG-06 fails above 400 to catch a systemic loss.
+
+  This number was 277 at the time of the UAT sweep; the PriceCharting detail
+  backfill (`npm run backfill:pricecharting:details`) finished afterwards and
+  recovered 169 more images. It reported 2 errors, both for rows the repair had
+  merged away mid-run — the backfill snapshots its target list at startup, so
+  those ids were stale by the time it reached them. Harmless, and they resolve
+  on the next run.
 - **132 card-less sets hold sealed product.** These are genuine TCGplayer-only
   groupings with no card-set equivalent — "Miscellaneous Cards & Products" (633
   products), "World Championship Decks", "30th Celebration". Not duplicates; the
