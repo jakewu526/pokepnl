@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { BackLink } from "@/components/BackLink";
-import { getSealedProductDetail, SEALED_TYPE_LABELS } from "@/lib/sealed";
+import { getSealedProductDetail, SEALED_TYPE_LABELS, SEALED_SOURCE_LABELS } from "@/lib/sealed";
 import { getWatchlistedSealedIds } from "@/lib/watchlist";
 import { getCurrentUser } from "@/lib/dal";
 import { PriceChart } from "@/components/PriceChart";
@@ -89,7 +89,7 @@ export default async function SealedProductDetailPage({
                     </p>
                     {product.priceSource && (
                       <p className="mt-1 font-body text-xs text-ink-muted">
-                        {product.priceSource === "PRICECHARTING" ? "PriceCharting" : "eBay listings"}
+                        {SEALED_SOURCE_LABELS[product.priceSource]}
                       </p>
                     )}
                   </>
@@ -118,7 +118,7 @@ export default async function SealedProductDetailPage({
       </main>
 
       <footer className="border-t border-line px-4 py-4 text-center font-data text-xs text-ink-muted sm:px-6">
-        Prices from PriceCharting and eBay, captured daily
+        Prices from TCGplayer, PriceCharting and eBay, captured daily
       </footer>
     </div>
   );

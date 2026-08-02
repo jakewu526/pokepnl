@@ -50,6 +50,12 @@ export const SEALED_TYPE_LABELS: Record<SealedProductType, string> = {
 export const SEALED_PRICE_SOURCES = ["TCGPLAYER", "PRICECHARTING", "EBAY"] as const;
 export type SealedPriceSource = (typeof SEALED_PRICE_SOURCES)[number];
 
+export const SEALED_SOURCE_LABELS: Record<SealedPriceSource, string> = {
+  TCGPLAYER: "TCGplayer",
+  PRICECHARTING: "PriceCharting",
+  EBAY: "eBay listings",
+};
+
 function betterSource(a: SealedPriceSource, b: SealedPriceSource): SealedPriceSource {
   return SEALED_PRICE_SOURCES.indexOf(a) <= SEALED_PRICE_SOURCES.indexOf(b) ? a : b;
 }
