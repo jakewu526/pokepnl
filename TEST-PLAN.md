@@ -549,6 +549,7 @@ These are SQL / arithmetic checks, not clicking.
 | Date | Env | Suites run | Result | Notes |
 |---|---|---|---|---|
 | 2026-07-31 | prod | All suites at DB + HTTP level; UI suites by review only | 8 defects — see [TEST-RESULTS-2026-07-31.md](TEST-RESULTS-2026-07-31.md) | First formal run. 4 fixed (graded-price leak, orphaned-session lockout, blank `/watchlist`, missing 404 page), 4 reported. Click-driven cases unverified: the browser pane never composited, so all elements measured 0×0. |
+| 2026-08-02 | uat | All suites at DB + HTTP level, incl. new SEAL-20…36; sealed UI in a live browser | 0 failures / 106 assertions — see [TEST-RESULTS-2026-08-02.md](TEST-RESULTS-2026-08-02.md) | Sealed catalog rebuilt on TCGplayer (997 → 3,840 products). SEAL-20…36 are now automated in `audit:data`/`audit:http`. Same click-interaction caveat as above. |
 
 ### Automated coverage
 
@@ -562,12 +563,25 @@ npm run audit:data
 npm run audit:http
 ```
 
-`audit:data` covers DATA-*, PRICE-*, and IMG-* against the database.
-`audit:http` covers SMOKE-*, CAT-*, SETS-*, SETD-*, CARD-*, SEAL-*, SEC-*, and
-AUTH-* by sweeping every route in five auth states (it mints session JWTs with
-`SESSION_SECRET`, so it needs no browser or password). Point it at another
-environment with `AUDIT_BASE=http://localhost:3001`. Both exit non-zero on
-failure. Everything else in this document is still a manual check.
+`audit:data` covers DATA-*, PRICE-*, SEAL-* (catalog size, retailer exclusives,
+per-set variant coverage, identity/dedup) and IMG-* against the database.
+`audit:http` covers SMOKE-*, CAT-*, SETS-*, SETD-*, CARD-*, SEAL-* (filters,
+filter persistence across pagination, grid-vs-detail price parity, image hosts),
+SEC-*, and AUTH-* by sweeping every route in five auth states (it mints session
+JWTs with `SESSION_SECRET`, so it needs no browser or password). Both exit
+non-zero on failure. Everything else in this document is still a manual check.
+
+**Run both from the checkout whose `.env` points at the environment under
+test**, and set `AUDIT_BASE` to match:
+
+```bash
+cd "../Pokemon App - UAT" && AUDIT_BASE=http://localhost:3001 npm run audit:http
+```
+
+`audit:http` selects target ids from the database and then requests them over
+HTTP, so a mismatched pair asks one environment for another's ids. It now checks
+that up front and fails with a single `[ENV]` message rather than a misleading
+sweep of detail-page failures.
 
 ---
 
@@ -576,4 +590,4 @@ failure. Everything else in this document is still a manual check.
 | Date | Change |
 |---|---|
 | 2026-07-31 | Created. Covers every feature through commit `c7794d2`. |
-| 2026-08-02 | Added SEAL-20…36 for the TCGplayer-sourced sealed catalog (identity, dedup, type taxonomy, price cascade, filters). |
+| 2026-08-02 | Added SEAL-20…36 for the TCGplayer-sourced sealed catalog (identity, dedup, type taxonomy, price cascade, filters), then automated them in `audit:data`/`audit:http`. |
