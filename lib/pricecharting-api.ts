@@ -143,6 +143,56 @@ export const SET_NAME_ALIASES: Record<string, string> = {
 // against every CardSet whose name contains "Promo" -- most eras bake the
 // era prefix into the number itself (e.g. "XY01", "SM244", "SWSH083"), which
 // keeps cross-era collisions rare.
+// Every normalized name a CardSet should be findable under. Our set names come
+// from pokemontcg.io ("151") while TCGplayer and PriceCharting use the full
+// marketing name ("Scarlet & Violet 151"), so matching on the bare name alone
+// spawns a second, card-less set and splits the sealed catalog in two.
+// SET_NAME_ALIASES already records that correspondence for PriceCharting;
+// reusing it here means one table serves both importers.
+// The recurring shape differences between the three catalogues, beyond what
+// tightNormalize already collapses:
+//   "Sword & Shield Base Set" / "XY Base Set"  vs  "Sword & Shield" / "XY"
+//   "EX Hidden Legends" / "EX Emerald"         vs  "Hidden Legends" / "Emerald"
+//   "Black and White" / "Diamond and Pearl"    vs  "Black & White" / "Diamond & Pearl"
+// ("and" survives tightNormalize as letters, so it has to be dropped here.)
+const NAME_VARIANTS: ((name: string) => string)[] = [
+  (n) => n,
+  (n) => n.replace(/\s+base set$/i, ""),
+  (n) => n.replace(/\s+set$/i, ""),
+  (n) => n.replace(/^ex\s+/i, ""),
+  (n) => n.replace(/\band\b/gi, "&"),
+  (n) => n.replace(/\band\b/gi, "&").replace(/\s+base set$/i, ""),
+];
+
+export function setNameKeys(setName: string): string[] {
+  const names = [setName];
+  const alias = SET_NAME_ALIASES[setName];
+  if (alias) names.push(alias);
+
+  const keys = new Set<string>();
+  for (const name of names) {
+    for (const variant of NAME_VARIANTS) {
+      const key = tightNormalize(variant(name));
+      // A variant can normalize away to nothing (e.g. the set literally named
+      // "Base Set"); an empty key would match every other empty key.
+      if (key) keys.add(key);
+    }
+  }
+  return [...keys];
+}
+
+// Qualifies a PriceCharting product name with its set. PriceCharting's names
+// are set-relative ("Booster Box", "Mini Tin"), but some already carry the set
+// name ("151 Mini Tin" in the "151" console) -- prefixing those unconditionally
+// produced "151 151 Mini Tin".
+export function sealedProductName(setName: string | null, productName: string): string {
+  if (!setName) return productName;
+  const normalizedSet = tightNormalize(setName);
+  return normalizedSet && tightNormalize(productName).startsWith(normalizedSet)
+    ? productName
+    : `${setName} ${productName}`;
+}
+
 export const FLAT_PROMO_CONSOLE = "Pokemon Promo";
 
 export type ConsoleIndex = Map<string, { consoleName: string; rows: PriceGuideRow[] }>;

@@ -12,6 +12,7 @@ import {
   resolveOrCreateSet,
   firstErrorLine,
   isCardLikeProductName,
+  sealedProductName,
   FLAT_PROMO_CONSOLE,
   type PriceGuideRow,
   type ConsoleIndex,
@@ -74,7 +75,7 @@ function buildName(setName: string | null, type: string, row: PriceGuideRow): st
     suffix && row.productName.trim().toLowerCase() === suffix.toLowerCase()
       ? suffix
       : row.productName;
-  return setName ? `${setName} ${label}` : label;
+  return sealedProductName(setName, label);
 }
 
 async function upsertSealedProduct(

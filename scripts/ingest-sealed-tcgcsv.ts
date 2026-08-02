@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { prisma } from "@/lib/prisma";
 import { capturePriceSnapshot } from "@/lib/price-snapshot";
-import { tightNormalize } from "@/lib/pricecharting-api";
+import { tightNormalize, setNameKeys } from "@/lib/pricecharting-api";
 import {
   fetchGroups,
   fetchProducts,
@@ -42,15 +42,24 @@ type Stats = {
 // Pack"). Stripping it is what lets an existing set be reused instead of
 // spawning a near-duplicate.
 function cleanGroupName(name: string): string {
-  return name.replace(/^[A-Za-z]{1,6}[0-9]*[a-z+]*\s*[:\-]\s*/, "").trim() || name.trim();
+  // The code can end in an upper- or lower-case letter ("SV11B: Black Bolt",
+  // "sm1+: Enhanced Expansion Pack"), so the trailing class has to allow both.
+  return name.replace(/^[A-Za-z]{1,6}[0-9]*[A-Za-z+]*\s*[:\-]\s*/, "").trim() || name.trim();
 }
 
 type SetIndex = Map<string, string>;
 
 async function buildSetIndex(): Promise<SetIndex> {
-  const sets = await prisma.cardSet.findMany({ select: { id: true, name: true } });
+  const sets = await prisma.cardSet.findMany({
+    select: { id: true, name: true, _count: { select: { cards: true } } },
+  });
   const index: SetIndex = new Map();
-  for (const s of sets) index.set(tightNormalize(s.name), s.id);
+  // Card-bearing sets are indexed last so they win any key collision with a
+  // previously-created sealed-only set -- sealed product should attach to the
+  // real set, not to a stray duplicate.
+  for (const s of [...sets].sort((a, b) => a._count.cards - b._count.cards)) {
+    for (const key of setNameKeys(s.name)) index.set(key, s.id);
+  }
   return index;
 }
 

@@ -4,7 +4,9 @@ import {
   downloadPriceGuide,
   isSealedGenre,
   firstErrorLine,
+  setNameKeys,
   isCardLikeProductName,
+  sealedProductName,
   EMPTY_NUMBER_SUFFIX,
 } from "@/lib/pricecharting-api";
 
@@ -139,6 +141,61 @@ async function cleanCardLikeNames(apply: boolean): Promise<{ deleted: number; tr
   return { deleted, trimmed };
 }
 
+// TCGplayer names a set "Scarlet & Violet 151" where pokemontcg.io (our card
+// source) calls it "151", so an earlier ingest created a second, card-less
+// CardSet and split that set's sealed product across the two. This folds the
+// card-less duplicate back into the real set, using the same alias table the
+// importers now match on.
+async function mergeDuplicateSets(apply: boolean): Promise<{ merged: number; unmatched: string[] }> {
+  const sets = await prisma.cardSet.findMany({
+    select: { id: true, name: true, _count: { select: { cards: true, sealedProducts: true } } },
+  });
+
+  const realByKey = new Map<string, { id: string; name: string }>();
+  for (const s of sets) {
+    if (s._count.cards === 0) continue;
+    for (const key of setNameKeys(s.name)) realByKey.set(key, { id: s.id, name: s.name });
+  }
+
+  let merged = 0;
+  const unmatched: string[] = [];
+
+  for (const dup of sets) {
+    if (dup._count.cards > 0 || dup._count.sealedProducts === 0) continue;
+
+    const target = setNameKeys(dup.name)
+      .map((k) => realByKey.get(k))
+      .find((t) => t && t.id !== dup.id);
+    if (!target) { unmatched.push(dup.name); continue; }
+
+    console.log(`  SET     "${dup.name}" (${dup._count.sealedProducts} sealed) -> "${target.name}"`);
+    if (!apply) { merged += 1; continue; }
+
+    const products = await prisma.sealedProduct.findMany({ where: { setId: dup.id } });
+    for (const p of products) {
+      const clash = await prisma.sealedProduct.findFirst({
+        where: { setId: target.id, name: p.name },
+      });
+      if (clash) {
+        // Same product reached the two sets from different sources -- fold
+        // them together rather than leaving a renamed near-duplicate.
+        const [mine, theirs] = await Promise.all([userDataCounts(p.id), userDataCounts(clash.id)]);
+        const winner = mine.hasUserData && !theirs.hasUserData ? p.id : clash.id;
+        const loser = winner === p.id ? clash.id : p.id;
+        if (winner === p.id) {
+          await prisma.sealedProduct.update({ where: { id: p.id }, data: { setId: target.id } });
+        }
+        await mergeInto(winner, loser);
+      } else {
+        await prisma.sealedProduct.update({ where: { id: p.id }, data: { setId: target.id } });
+      }
+    }
+    await prisma.cardSet.delete({ where: { id: dup.id } });
+    merged += 1;
+  }
+  return { merged, unmatched };
+}
+
 async function main() {
   const apply = process.argv.includes("--apply");
   console.log(`Repair sealed products -- ${apply ? "APPLY" : "DRY RUN (pass --apply to write)"}\n`);
@@ -147,6 +204,11 @@ async function main() {
   const guide = await downloadPriceGuide("pokemon-cards");
   const byId = new Map(guide.filter((r) => isSealedGenre(r.genre)).map((r) => [r.pricechartingId, r]));
   console.log(`  ${byId.size} sealed rows indexed by pricechartingId\n`);
+
+  console.log("Phase 0: folding card-less duplicate sets into the real set...");
+  const setMerge = await mergeDuplicateSets(apply);
+  console.log(`  ${setMerge.merged} duplicate sets merged, ${setMerge.unmatched.length} left unmatched
+`);
 
   console.log("Phase 1: folding together products both sources created separately...");
   const crossMerged = await mergeCrossSourceDuplicates(guide, apply);
@@ -187,7 +249,7 @@ async function main() {
     // Strip the same "#None" junk phase 2 trims, or the two phases fight over
     // the name and the repair never converges.
     const productName = guideRow.productName.replace(EMPTY_NUMBER_SUFFIX, "").trim();
-    const trueName = row.setName ? `${row.setName} ${productName}` : productName;
+    const trueName = sealedProductName(row.setName, productName);
     if (row.name === trueName) { c.unchanged += 1; continue; }
 
     // TCGplayer-sourced products keep their own (cleaner, already
