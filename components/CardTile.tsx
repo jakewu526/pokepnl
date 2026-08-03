@@ -1,8 +1,11 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import type { CardListItem } from "@/lib/cards";
 import { WatchlistHeartButton } from "@/components/WatchlistHeartButton";
 import { QuickAddToCollectionButton } from "@/components/QuickAddToCollectionButton";
+import { useBinderSelection } from "@/components/BinderSelection";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -20,9 +23,38 @@ function formatNumber(number: string, setTotal: number | null): string {
 // instead of saving anything, since there's nowhere yet for them to save it.
 export function CardTile({ card, watched }: { card: CardListItem; watched?: boolean }) {
   const isAuthed = watched != null;
+  const { active, selected, toggle } = useBinderSelection();
+  const isSelected = selected.has(card.id);
+
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-card border border-line bg-paper-raised transition-shadow hover:shadow-[0_2px_0_var(--line)]">
-      <Link href={`/cards/${card.id}`} className="flex flex-1 flex-col">
+    <div
+      className={`group relative flex flex-col overflow-hidden rounded-card border bg-paper-raised transition-shadow hover:shadow-[0_2px_0_var(--line)] ${
+        isSelected ? "border-emerald ring-2 ring-emerald" : "border-line"
+      }`}
+    >
+      <Link
+        href={`/cards/${card.id}`}
+        className="flex flex-1 flex-col"
+        onClick={(e) => {
+          if (!active) return;
+          e.preventDefault();
+          toggle(card.id, card.price);
+        }}
+      >
+        {active && (
+          <span
+            aria-hidden="true"
+            className={`absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 ${
+              isSelected ? "border-emerald bg-emerald" : "border-line bg-paper-raised/90"
+            }`}
+          >
+            {isSelected && (
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="var(--paper-raised)" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 12.5l4.5 4.5L19 7" />
+              </svg>
+            )}
+          </span>
+        )}
         <div className="relative aspect-[5/7] bg-line/40">
           {card.imageUrl ? (
             <Image
@@ -63,17 +95,22 @@ export function CardTile({ card, watched }: { card: CardListItem; watched?: bool
           </div>
         </div>
       </Link>
-      <WatchlistHeartButton
-        target={{ cardId: card.id }}
-        initialWatched={watched ?? false}
-        isAuthed={isAuthed}
-        className="absolute top-2 right-2"
-      />
-      <QuickAddToCollectionButton
-        cardId={card.id}
-        isAuthed={isAuthed}
-        className="absolute bottom-3 right-3"
-      />
+      {!active && (
+        <>
+          <WatchlistHeartButton
+            target={{ cardId: card.id }}
+            initialWatched={watched ?? false}
+            isAuthed={isAuthed}
+            className="absolute top-2 right-2"
+          />
+          <QuickAddToCollectionButton
+            cardId={card.id}
+            marketPrice={card.price}
+            isAuthed={isAuthed}
+            className="absolute bottom-3 right-3"
+          />
+        </>
+      )}
     </div>
   );
 }

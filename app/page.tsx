@@ -10,6 +10,10 @@ import { CatalogViewToggle, type CatalogView } from "@/components/CatalogViewTog
 import { Pagination } from "@/components/Pagination";
 import { AuthNav } from "@/components/AuthNav";
 import { CatalogNav } from "@/components/CatalogNav";
+import { ScrollRestoration } from "@/components/ScrollRestoration";
+import { BinderSelectionProvider } from "@/components/BinderSelection";
+import { BinderSelectModeToggle } from "@/components/BinderSelectModeToggle";
+import { BinderBatchAddBar } from "@/components/BinderBatchAddBar";
 
 export default async function Home({
   searchParams,
@@ -37,6 +41,9 @@ export default async function Home({
 
   return (
     <div className="flex min-h-full flex-col">
+      <Suspense fallback={null}>
+        <ScrollRestoration />
+      </Suspense>
       <header className="sticky top-0 z-10 border-b border-line bg-paper/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6">
           <div className="flex items-baseline justify-between gap-4">
@@ -86,11 +93,14 @@ export default async function Home({
               </p>
             </div>
           ) : (
-            <>
-              <p className="mb-4 font-data text-xs text-ink-muted">
-                {results.total.toLocaleString()} result{results.total === 1 ? "" : "s"}
-                {query && <> for “{query}”</>}
-              </p>
+            <BinderSelectionProvider>
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <p className="font-data text-xs text-ink-muted">
+                  {results.total.toLocaleString()} result{results.total === 1 ? "" : "s"}
+                  {query && <> for “{query}”</>}
+                </p>
+                {user && <BinderSelectModeToggle />}
+              </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
                 {results.cards.map((card) => (
                   <CardTile
@@ -103,7 +113,8 @@ export default async function Home({
               <div className="mt-8">
                 <Pagination query={query} page={results.page} pageCount={results.pageCount} />
               </div>
-            </>
+              <BinderBatchAddBar />
+            </BinderSelectionProvider>
           )
         )}
 

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { addToCollection } from "@/app/actions/collection";
 import { CONDITIONS, CONDITION_LABELS, type Condition } from "@/lib/condition";
 
-const POPUP_WIDTH = 224; // w-56
+const POPUP_WIDTH = 260;
 const POPUP_HEIGHT_ESTIMATE = 300;
 const VIEWPORT_MARGIN = 8;
 
@@ -16,10 +16,12 @@ function clamp(value: number, min: number, max: number): number {
 
 export function QuickAddToCollectionButton({
   cardId,
+  marketPrice,
   isAuthed = true,
   className = "",
 }: {
   cardId: string;
+  marketPrice?: number | null;
   isAuthed?: boolean;
   className?: string;
 }) {
@@ -149,22 +151,37 @@ export function QuickAddToCollectionButton({
             <label htmlFor={`quick-cost-${cardId}`} className="font-body text-xs font-medium text-ink-muted">
               Cost paid
             </label>
-            <div className="relative">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-data text-sm text-ink-muted">
-                $
-              </span>
-              <input
-                id={`quick-cost-${cardId}`}
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                autoFocus
-                value={cost}
-                onChange={(e) => setCost(e.target.value)}
-                className="h-10 w-full rounded-full border border-line bg-paper pl-6 pr-3 font-data text-sm text-ink outline-none focus:border-emerald"
-              />
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-data text-sm text-ink-muted">
+                  $
+                </span>
+                <input
+                  id={`quick-cost-${cardId}`}
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  autoFocus
+                  value={cost}
+                  onChange={(e) => setCost(e.target.value)}
+                  className="h-10 w-full rounded-full border border-line bg-paper pl-6 pr-3 font-data text-sm text-ink outline-none focus:border-emerald"
+                />
+              </div>
+              {marketPrice != null && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setCost(marketPrice.toFixed(2));
+                  }}
+                  className="whitespace-nowrap rounded-full border border-line px-3 py-2 font-body text-xs font-medium text-ink-muted hover:text-ink"
+                >
+                  Market rate
+                </button>
+              )}
             </div>
 
             <label htmlFor={`quick-condition-${cardId}`} className="font-body text-xs font-medium text-ink-muted">

@@ -54,6 +54,42 @@ export async function addToCollection(
   revalidatePath(`/cards/${cardId}`);
 }
 
+export async function batchAddToCollection(
+  items: { cardId: string; price: number | null }[]
+): Promise<void> {
+  const session = await verifySession();
+  if (items.length === 0) return;
+
+  await prisma.$transaction(async (tx) => {
+    for (const { cardId, price } of items) {
+      const costPerUnit = price ?? undefined;
+      const existing = await tx.collectionItem.findUnique({
+        where: { userId_cardId_condition: { userId: session.userId, cardId, condition: "NM" } },
+      });
+
+      if (existing) {
+        const mergedCost = mergeCost(
+          existing.costPerUnit != null ? parseFloat(existing.costPerUnit.toString()) : null,
+          existing.quantity,
+          costPerUnit,
+          1
+        );
+        await tx.collectionItem.update({
+          where: { id: existing.id },
+          data: { quantity: { increment: 1 }, costPerUnit: mergedCost },
+        });
+      } else {
+        await tx.collectionItem.create({
+          data: { userId: session.userId, cardId, condition: "NM", costPerUnit, quantity: 1 },
+        });
+      }
+    }
+  });
+
+  revalidatePath("/collection");
+  revalidatePath("/");
+}
+
 export async function addSealedToCollection(
   sealedProductId: string,
   condition: string = "Mint",
