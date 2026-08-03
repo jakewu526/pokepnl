@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 type BinderSelectionValue = {
   active: boolean;
@@ -47,6 +47,16 @@ export function BinderSelectionProvider({ children }: { children: ReactNode }) {
     }),
     [active, selected]
   );
+
+  useEffect(() => {
+    if (!active) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") value.toggleActive();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
 
   return <BinderSelectionContext.Provider value={value}>{children}</BinderSelectionContext.Provider>;
 }

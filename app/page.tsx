@@ -44,7 +44,7 @@ export default async function Home({
       <Suspense fallback={null}>
         <ScrollRestoration />
       </Suspense>
-      <header className="sticky top-0 z-10 border-b border-line bg-paper/95 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b border-line bg-paper/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6">
           <div className="flex items-baseline justify-between gap-4">
             <div className="flex items-baseline gap-3">
