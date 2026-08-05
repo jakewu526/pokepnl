@@ -11,9 +11,15 @@ onto TCGplayer data.
 checkout so the database and the HTTP target are the same environment. Visual
 and interaction cases were checked in a live browser against UAT.
 
-**Result: 0 failures across 106 automated assertions.** Two apparent anomalies
-during the browser pass turned out to be artifacts of the test harness, not
-defects — see [Investigated and cleared](#investigated-and-cleared).
+**Result: 0 failures across 106 automated assertions on UAT.** Two apparent
+anomalies during the browser pass turned out to be artifacts of the test
+harness, not defects — see
+[Investigated and cleared](#investigated-and-cleared).
+
+**Re-run against prod on 2026-08-04** after promotion, which found one real
+defect (S2 below) plus a blind spot in SEAL-30 itself. Both fixed; prod
+re-verified at `29adbb0` with **0 failures across 108 assertions** (30
+database, 78 HTTP), with SEAL-30 sampling 5 genuinely source-skewed products.
 
 ---
 
@@ -63,6 +69,43 @@ The four issues raised against the old catalog all verify clean on UAT:
   asserted absent by PRICE-13.
 - **`151 Sam's Club 4-Pack Mini Tin`** — present with an image, alongside 8 more
   Sam's Club exclusives.
+
+---
+
+## S2 — the grid and the detail page showed different prices
+
+Found by SEAL-30 when the suite was first run against **prod** after the
+deploy, at `c99d1e6`:
+
+```
+FAIL [SEAL-30] "151 Binder Collection" grid $239.69 vs detail $181.50
+```
+
+**The bug.** The detail page took its headline price from the tail of the
+charted series, which is selected by *newest capture date*. The grid takes it
+from `getLatestSealedPrices`, which is selected by *source preference*
+(`SEALED_PRICE_SOURCES`). Those pick differently the moment the preferred
+source's data is staler than another's — the same product then showed one
+price in the catalog and another on its own page.
+
+**Why it appeared now.** `daily-price-sync.ps1` only refreshed PriceCharting.
+TCGplayer — the *preferred* sealed source — was frozen at whenever the catalog
+was last imported while PriceCharting's cron advanced daily, so the gap widened
+every day. 932 products on prod carried that skew.
+
+**Fixed** in `9ffae2e`: the headline price always comes from the shared
+resolver, so the two cannot diverge by construction. The chart still selects
+its own series for continuity (PriceCharting supplies 97 points where TCGplayer
+has one) and reports it separately as `historySource`. `daily-price-sync.ps1`
+now runs `ingest:sealed:tcgcsv` on the same cadence as PriceCharting.
+
+**The check was also wrong.** SEAL-30 originally sampled products by name, so
+on UAT — where both sources had captured on the same day, leaving 1 skewed
+product out of 3,840 — it passed against data that could not have failed it,
+while prod was genuinely broken. Fixed in `29adbb0`: it now samples products
+whose sources disagree on which capture is newest, and prints which kind of
+sample it used. Re-verified by reproducing prod's skew on UAT (913 products)
+before promoting.
 
 ---
 

@@ -550,6 +550,7 @@ These are SQL / arithmetic checks, not clicking.
 |---|---|---|---|---|
 | 2026-07-31 | prod | All suites at DB + HTTP level; UI suites by review only | 8 defects — see [TEST-RESULTS-2026-07-31.md](TEST-RESULTS-2026-07-31.md) | First formal run. 4 fixed (graded-price leak, orphaned-session lockout, blank `/watchlist`, missing 404 page), 4 reported. Click-driven cases unverified: the browser pane never composited, so all elements measured 0×0. |
 | 2026-08-02 | uat | All suites at DB + HTTP level, incl. new SEAL-20…36; sealed UI in a live browser | 0 failures / 106 assertions — see [TEST-RESULTS-2026-08-02.md](TEST-RESULTS-2026-08-02.md) | Sealed catalog rebuilt on TCGplayer (997 → 3,840 products). SEAL-20…36 are now automated in `audit:data`/`audit:http`. Same click-interaction caveat as above. |
+| 2026-08-04 | prod | All suites at DB + HTTP level | 1 defect found and fixed; re-run 0 failures / 108 assertions | SEAL-30 caught the grid and detail page disagreeing on price (S2 in the results). Also exposed that SEAL-30 sampled products that couldn't fail it — now samples source-skewed ones. Verify a price fix on data that actually carries the skew; same-day captures on both sources hide it. |
 
 ### Automated coverage
 
