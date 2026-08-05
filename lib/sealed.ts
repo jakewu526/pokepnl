@@ -156,6 +156,9 @@ export type SealedProductDetail = {
   setSeries: string | null;
   price: number | null;
   priceSource: SealedPriceSource | null;
+  // Source of the charted series, which can differ from priceSource when the
+  // preferred source's latest capture is older than another source's.
+  historySource: SealedPriceSource | null;
   history: PricePoint[];
 };
 
@@ -191,7 +194,10 @@ export async function getSealedProductDetail(id: string): Promise<SealedProductD
   `;
 
   let history: PricePoint[] = [];
-  let priceSource: SealedPriceSource | null = null;
+  // The series drawn in the chart, which is chosen for continuity rather than
+  // for headline accuracy -- it can legitimately differ from the source the
+  // headline price comes from (see below).
+  let historySource: SealedPriceSource | null = null;
 
   if (rows.length > 0) {
     const last = rows[rows.length - 1];
@@ -200,7 +206,7 @@ export async function getSealedProductDetail(id: string): Promise<SealedProductD
       (r) => r.capturedDate.toISOString().slice(0, 10) === lastDateKey
     );
     const chosen = lastDayRows.reduce((best, r) => (betterSource(r.source, best.source) === r.source ? r : best), last);
-    priceSource = chosen.source;
+    historySource = chosen.source;
 
     history = rows
       .filter((r) => r.source === chosen.source)
@@ -213,18 +219,16 @@ export async function getSealedProductDetail(id: string): Promise<SealedProductD
     history = densifyHistory(history, id);
   }
 
-  let price = history.length > 0 ? history[history.length - 1].price : null;
-
-  // No MARKET history at all (presale product with only a preorder ask) --
-  // fall back to the same resolver the grid uses so the two never disagree.
-  // The chart stays empty; there's no series worth drawing from one point.
-  if (price == null) {
-    const fallback = (await getLatestSealedPrices([id])).get(id);
-    if (fallback) {
-      price = fallback.price;
-      priceSource = fallback.source;
-    }
-  }
+  // The headline price always comes from the shared resolver, never from the
+  // tail of the charted series. Those two can disagree: the chart follows the
+  // freshest capture date, while the resolver follows SEALED_PRICE_SOURCES.
+  // When TCGplayer's snapshot is a day older than PriceCharting's, the chart
+  // draws PriceCharting while the grid still (correctly) prefers TCGplayer --
+  // and the same product then showed two different prices depending on which
+  // page you were on. Sourcing the headline here makes that impossible.
+  const latest = (await getLatestSealedPrices([id])).get(id);
+  const price = latest?.price ?? (history.length > 0 ? history[history.length - 1].price : null);
+  const priceSource = latest?.source ?? historySource;
 
   return {
     id: product.id,
@@ -235,6 +239,7 @@ export async function getSealedProductDetail(id: string): Promise<SealedProductD
     setSeries: product.set?.series ?? null,
     price,
     priceSource,
+    historySource,
     history,
   };
 }

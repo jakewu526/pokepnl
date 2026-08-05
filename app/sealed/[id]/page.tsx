@@ -109,7 +109,7 @@ export default async function SealedProductDetailPage({
               <h2 className="mb-2 font-body text-sm font-semibold text-ink">Price history</h2>
               <PriceChart
                 points={product.history}
-                source={product.priceSource ?? null}
+                source={product.historySource ?? null}
                 showRangeControls
               />
             </div>

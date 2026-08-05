@@ -31,6 +31,11 @@ function Run-Step($label, $scriptBlock) {
 $ok = Run-Step "Ensuring Postgres container is up" { docker compose up -d }
 if ($ok) { Start-Sleep -Seconds 5 }
 if ($ok) { $ok = Run-Step "Running ingest:cards:pricecharting" { npm run ingest:cards:pricecharting } }
+# TCGplayer is the preferred sealed price source (see SEALED_PRICE_SOURCES in
+# lib/sealed.ts), so it has to refresh on the same cadence as PriceCharting.
+# Without this its prices freeze at whenever the catalog was last imported
+# while PriceCharting keeps advancing, and the two sources drift apart.
+if ($ok) { $ok = Run-Step "Running ingest:sealed:tcgcsv" { npm run ingest:sealed:tcgcsv } }
 if ($ok) { $ok = Run-Step "Running ingest:sealed:pricecharting" { npm run ingest:sealed:pricecharting } }
 
 if ($ok) {
