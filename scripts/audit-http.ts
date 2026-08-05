@@ -198,11 +198,33 @@ async function main() {
   // SEAL-30: the grid and the detail page must agree. Both read the same
   // resolver, but they are separate queries -- a divergence here is the exact
   // class of bug that made list and detail prices disagree before.
-  const priced = await pick(`
+  //
+  // Sampled from products whose sources disagree on which capture is newest,
+  // because that is the only shape that ever broke: the chart follows the
+  // freshest date while the grid follows source preference, so the two only
+  // diverge when the preferred source is the staler one. Sampling arbitrary
+  // products made this check pass against data that could never have failed
+  // it -- which is exactly what happened on UAT while prod was broken.
+  const skewed = await pick(`
+    SELECT sp.id, sp.name FROM "SealedProduct" sp
+    JOIN (
+      SELECT ps."sealedProductId" AS id FROM "PriceSnapshot" ps
+      WHERE ps."priceType"='MARKET' AND ps.condition IS NULL AND ps."sealedProductId" IS NOT NULL
+      GROUP BY ps."sealedProductId"
+      HAVING count(DISTINCT ps.source) > 1
+         AND max(ps."capturedDate") FILTER (WHERE ps.source='TCGPLAYER')
+             IS DISTINCT FROM max(ps."capturedDate") FILTER (WHERE ps.source='PRICECHARTING')
+    ) d ON d.id = sp.id
+    ORDER BY sp.name LIMIT 5`);
+  const fallback = await pick(`
     SELECT sp.id, sp.name FROM "SealedProduct" sp
     WHERE EXISTS (SELECT 1 FROM "PriceSnapshot" ps WHERE ps."sealedProductId"=sp.id
       AND ps."priceType"='MARKET' AND ps.condition IS NULL)
     ORDER BY sp.name LIMIT 3`);
+  const priced = skewed.length ? skewed : fallback;
+  console.log(
+    `  ....  [SEAL-30] sampling ${priced.length} ${skewed.length ? "source-skewed" : "arbitrary (no skew present)"} products`
+  );
   for (const p of priced) {
     const detail = strip(await (await fetch(`${BASE}/sealed/${p.id}`)).text());
     const grid = strip(await (await fetch(`${BASE}/sealed?q=${encodeURIComponent(p.name)}`)).text());
