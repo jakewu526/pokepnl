@@ -283,8 +283,13 @@ async function main() {
   await hit("IMG-03", `/_next/image?url=${encodeURIComponent("https://evil.example.com/x.png")}&w=256&q=75`, { status: 400 });
 
   console.log("\n== Auth states ==");
+  // name: { not: null } matters as much as having a collection item -- a
+  // nameless account gets welcome-gated on every protected route (see
+  // lib/dal.ts's verifySession()), so without this filter these checks can
+  // silently land on /welcome's markup instead of the page under test and
+  // fail on "body missing X" for a completely unrelated reason.
   const user = await prisma.user.findFirst({
-    where: { collectionItems: { some: {} } },
+    where: { collectionItems: { some: {} }, name: { not: null } },
     select: { id: true, email: true },
   });
   if (user) {
@@ -312,14 +317,12 @@ async function main() {
     await hit("AUTH-70", "/dashboard", { status: 200, rawIncludes: "1;url=/welcome" }, nc);
     await hit("AUTH-71", "/welcome", { status: 200, bodyIncludes: "What should we call you" }, nc);
   }
-  // Deliberately not reusing `user` above -- it's picked only by "has a
-  // collection item" and could itself be the nameless fixture, which would
-  // make this assert the wrong thing without failing loudly.
-  const named = await prisma.user.findFirst({ where: { name: { not: null } }, select: { id: true } });
-  if (named) {
+  // `user` above is now guaranteed named (its own query filters on it), so
+  // it's safe to reuse here too.
+  if (user) {
     // A user who already has a name has no reason to be on /welcome -- it
     // must bounce them straight back rather than show the form again.
-    await hit("AUTH-72", "/welcome", { status: 200, rawIncludes: "1;url=/dashboard" }, `session=${await mint(named.id)}; dash_landed=1`);
+    await hit("AUTH-72", "/welcome", { status: 200, rawIncludes: "1;url=/dashboard" }, `session=${await mint(user.id)}; dash_landed=1`);
   }
   await hit("AUTH-73", "/welcome", { status: 307, location: "/login" });
 
