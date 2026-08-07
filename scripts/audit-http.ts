@@ -120,8 +120,14 @@ async function main() {
   await hit("SEAL-01", "/sealed", { status: 200 });
   await hit("AUTH-06", "/login", { status: 200, bodyIncludes: "Log in" });
   await hit("AUTH-06", "/signup", { status: 200, bodyIncludes: "Sign up" });
-  await hit("AUTH-01", "/collection", { status: 307, location: "/login" });
+  // /collection is a plain next.config.ts redirect now -- it fires before
+  // proxy.ts sees the cookie, so it 308s to /dashboard unconditionally. The
+  // actual auth gate lives on /dashboard itself.
+  await hit("AUTH-01", "/collection", { status: 308, location: "/dashboard" });
+  await hit("AUTH-01", "/dashboard", { status: 307, location: "/login" });
   await hit("AUTH-02", "/watchlist", { status: 307, location: "/login" });
+  await hit("AUTH-02", "/portfolio", { status: 307, location: "/login" });
+  await hit("AUTH-02", "/transactions", { status: 307, location: "/login" });
   await hit("SMOKE-08", "/does-not-exist", { status: 404 });
 
   console.log("\n== Pagination edges ==");
@@ -284,13 +290,38 @@ async function main() {
   if (user) {
     const c = `session=${await mint(user.id)}; dash_landed=1`;
     console.log(`  (signed in as ${user.email})`);
-    await hit("SMOKE-04", "/collection", { status: 200, bodyIncludes: "My Collection" }, c);
+    await hit("SMOKE-04", "/dashboard", { status: 200, bodyIncludes: "Dashboard" }, c);
+    await hit("SMOKE-04", "/portfolio", { status: 200, bodyIncludes: "My Portfolio" }, c);
+    await hit("SMOKE-04", "/transactions", { status: 200, bodyIncludes: "Transactions" }, c);
     await hit("WATCH-06", "/watchlist", { status: 200, bodyIncludes: "Watchlist" }, c);
-    await hit("AUTH-44", "/login", { status: 307, location: "/collection" }, c);
-    await hit("AUTH-44", "/signup", { status: 307, location: "/collection" }, c);
+    await hit("AUTH-44", "/login", { status: 307, location: "/dashboard" }, c);
+    await hit("AUTH-44", "/signup", { status: 307, location: "/dashboard" }, c);
     await hit("AUTH-41", "/", { status: 200 }, c);
-    await hit("AUTH-40", "/", { status: 307, location: "/collection" }, `session=${await mint(user.id)}`);
+    await hit("AUTH-40", "/", { status: 307, location: "/dashboard" }, `session=${await mint(user.id)}`);
   }
+
+  // Every account is supposed to have a name -- required at signup going
+  // forward; Google sign-in and any legacy account without one get bounced
+  // to /welcome to collect it (see lib/dal.ts's verifySession()). Same
+  // streaming caveat as the ghost-account/404 cases below: the redirect
+  // lands as a meta refresh, so this is a 200 whose body points at /welcome.
+  const nameless = await prisma.user.findFirst({ where: { name: null }, select: { id: true, email: true } });
+  if (nameless) {
+    const nc = `session=${await mint(nameless.id)}; dash_landed=1`;
+    console.log(`  (no-name account: ${nameless.email})`);
+    await hit("AUTH-70", "/dashboard", { status: 200, rawIncludes: "1;url=/welcome" }, nc);
+    await hit("AUTH-71", "/welcome", { status: 200, bodyIncludes: "What should we call you" }, nc);
+  }
+  // Deliberately not reusing `user` above -- it's picked only by "has a
+  // collection item" and could itself be the nameless fixture, which would
+  // make this assert the wrong thing without failing loudly.
+  const named = await prisma.user.findFirst({ where: { name: { not: null } }, select: { id: true } });
+  if (named) {
+    // A user who already has a name has no reason to be on /welcome -- it
+    // must bounce them straight back rather than show the form again.
+    await hit("AUTH-72", "/welcome", { status: 200, rawIncludes: "1;url=/dashboard" }, `session=${await mint(named.id)}; dash_landed=1`);
+  }
+  await hit("AUTH-73", "/welcome", { status: 307, location: "/login" });
 
   // A JWT that verifies but names a user this database doesn't have: deleted
   // account, restored database, or a session minted on the other environment
@@ -298,15 +329,18 @@ async function main() {
   // out of /login -- see app/api/auth/reset/route.ts.
   const ghost = `session=${await mint("cl000000000000000000000000")}; dash_landed=1`;
   console.log("  (orphaned session)");
-  // Same streaming caveat as NOT_FOUND_MARKER: verifySession's redirect lands
-  // as a meta refresh, so this is a 200 whose body points at the reset route.
-  await hit("AUTH-48", "/collection", { status: 200, rawIncludes: "1;url=/api/auth/reset" }, ghost);
+  // /collection is now a blind next.config.ts redirect that never evaluates
+  // the cookie, so these have to hit /dashboard directly to exercise
+  // verifySession(). Same streaming caveat as NOT_FOUND_MARKER: verifySession's
+  // redirect lands as a meta refresh, so this is a 200 whose body points at
+  // the reset route.
+  await hit("AUTH-48", "/dashboard", { status: 200, rawIncludes: "1;url=/api/auth/reset" }, ghost);
   await hit("AUTH-48", "/api/auth/reset", { status: 307, locationEndsWith: "/login" }, ghost);
   await hit("AUTH-48", "/", { status: 200 }, ghost);
 
   console.log("  (tampered / expired session)");
-  await hit("AUTH-48", "/collection", { status: 307, location: "/login" }, "session=garbage.garbage.garbage");
-  await hit("AUTH-49", "/collection", { status: 307, location: "/login" },
+  await hit("AUTH-48", "/dashboard", { status: 307, location: "/login" }, "session=garbage.garbage.garbage");
+  await hit("AUTH-49", "/dashboard", { status: 307, location: "/login" },
     `session=${await new SignJWT({ userId: "x", expiresAt: "2020-01-01" })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt(Math.floor(Date.now() / 1000) - 10000)

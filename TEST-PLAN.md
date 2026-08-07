@@ -68,6 +68,7 @@ Keep these three states available. Several bugs only appear in one of them.
 | **Empty user** | Freshly signed-up account, zero collection, zero watchlist, zero transactions |
 | **Power user** | ≥ 50 collection items across cards *and* sealed, multiple conditions of the same card, some items with no cost basis, ≥ 5 transactions incl. one at a loss, ≥ 20 watchlist items |
 | **Google user** | Account created via Google sign-in (has no `passwordHash`) |
+| **No-name user** | Account with `name` null in the DB -- a Google sign-in whose claim omitted one, or a legacy account from before the field was required. `test@example.com` in the dev DB is this fixture; don't "fix" it by giving it a name, other cases depend on it staying nameless |
 
 ---
 
@@ -76,13 +77,14 @@ Keep these three states available. Several bugs only appear in one of them.
 | ID | Case | Expected |
 |---|---|---|
 | SMOKE-01 | Load `/` signed out | 200, catalog renders, no console errors |
-| SMOKE-02 | Load `/` signed in (first visit of browser session) | redirects to `/collection` once |
+| SMOKE-02 | Load `/` signed in (first visit of browser session) | redirects to `/dashboard` once |
 | SMOKE-03 | Load `/sealed`, `/login`, `/signup` signed out | all 200 |
-| SMOKE-04 | Load `/collection`, `/watchlist` signed in | both 200 |
+| SMOKE-04 | Load `/dashboard`, `/portfolio`, `/transactions`, `/watchlist` signed in | all 200 |
 | SMOKE-05 | Load a card detail, a set detail, a sealed detail | all 200 |
 | SMOKE-06 | Browser console on every page above | zero errors (warnings triaged) |
 | SMOKE-07 | Server log during the sweep | zero unhandled rejections / Prisma errors |
 | SMOKE-08 | Unknown route `/does-not-exist` | 404 page, not a crash |
+| SMOKE-09 | Load `/collection` (any auth state) | 308 to `/dashboard` — old bookmarks/links still work |
 
 ---
 
@@ -91,8 +93,9 @@ Keep these three states available. Several bugs only appear in one of them.
 ### Signed-out behaviour
 | ID | Case | Expected |
 |---|---|---|
-| AUTH-01 | Visit `/collection` signed out | redirect to `/login` |
-| AUTH-02 | Visit `/watchlist` signed out | must not 500; either redirect to `/login` or render a signed-out state |
+| AUTH-01 | Visit `/dashboard` signed out | redirect to `/login` |
+| AUTH-01b | Visit `/collection` signed out | 308 to `/dashboard` first (config redirect, doesn't see the cookie), *then* `/dashboard` redirects to `/login` |
+| AUTH-02 | Visit `/watchlist`, `/portfolio`, `/transactions` signed out | must not 500; either redirect to `/login` or render a signed-out state |
 | AUTH-03 | Card tile heart, signed out | visible; clicking sends to signup/login, saves nothing |
 | AUTH-04 | Quick add-to-collection button, signed out | visible; clicking sends to signup/login |
 | AUTH-05 | Card / sealed detail add form, signed out | visible, prompts sign-in |
@@ -101,17 +104,17 @@ Keep these three states available. Several bugs only appear in one of them.
 ### Sign-up
 | ID | Case | Expected |
 |---|---|---|
-| AUTH-10 | Sign up with valid email + 8+ char password | account created, session set, lands on `/collection` |
+| AUTH-10 | Sign up with valid email + 8+ char password | account created, session set, lands on `/dashboard` |
 | AUTH-11 | Sign up with invalid email | inline field error, no account |
 | AUTH-12 | Sign up with 7-char password | "at least 8 characters" error |
 | AUTH-13 | Sign up with an email that already exists | "An account with this email already exists." |
 | AUTH-14 | Sign up with email differing only by case / trailing space | trimmed; must not create a duplicate account |
-| AUTH-15 | Name field left blank | allowed, stored as null |
+| AUTH-15 | Name field left blank, or whitespace-only | rejected, "Name is required." — name became a required field once the dashboard hero started greeting the user by it |
 
 ### Log in
 | ID | Case | Expected |
 |---|---|---|
-| AUTH-20 | Correct credentials | session set, lands on `/collection` |
+| AUTH-20 | Correct credentials | session set, lands on `/dashboard` |
 | AUTH-21 | Wrong password | "Invalid email or password." — must not reveal whether the email exists |
 | AUTH-22 | Unknown email | same generic message |
 | AUTH-23 | Log in with a Google-only account's email + any password | "This account uses Google sign-in." |
@@ -130,13 +133,13 @@ Keep these three states available. Several bugs only appear in one of them.
 ### Session lifecycle & the dashboard-landing cookie
 | ID | Case | Expected |
 |---|---|---|
-| AUTH-40 | Signed in, visit `/` for the first time in a browser session | one redirect to `/collection`, `dash_landed` cookie set |
-| AUTH-41 | From `/collection`, click "← Binder" | goes to `/`, **stays** there (no bounce back) |
-| AUTH-42 | Browser Back from `/collection` after AUTH-40 | no redirect loop |
-| AUTH-43 | Reach `/collection` via a direct link/bookmark, then click "← Binder" | works on the first click |
-| AUTH-44 | Signed in, visit `/login` or `/signup` directly | redirected to `/collection` |
+| AUTH-40 | Signed in, visit `/` for the first time in a browser session | one redirect to `/dashboard`, `dash_landed` cookie set |
+| AUTH-41 | From `/dashboard`, click "← Binder" | goes to `/`, **stays** there (no bounce back) |
+| AUTH-42 | Browser Back from `/dashboard` after AUTH-40 | no redirect loop |
+| AUTH-43 | Reach `/dashboard` via a direct link/bookmark, then click "← Binder" | works on the first click |
+| AUTH-44 | Signed in, visit `/login` or `/signup` directly | redirected to `/dashboard` |
 | AUTH-45 | On `/login`, use the "leave / back" affordance | escapes to the catalog |
-| AUTH-46 | Log out | session cleared, redirected to `/login`, `/collection` now inaccessible |
+| AUTH-46 | Log out | session cleared, redirected to `/login`, `/dashboard` now inaccessible |
 | AUTH-47 | Log out then Back button | must not show a cached signed-in dashboard with live data |
 | AUTH-48 | Tamper with the `session` cookie value | treated as signed out, no 500 |
 | AUTH-49 | Expired session token | treated as signed out, no 500 |
@@ -148,6 +151,16 @@ Keep these three states available. Several bugs only appear in one of them.
 | AUTH-61 | User A calls `sellCollectionItem` with B's item id | no-op |
 | AUTH-62 | User A calls `setFeaturedWatchlistCard` with B's watchlist item id | rejected |
 | AUTH-63 | Any server action invoked with no session | throws/redirects, never writes |
+
+### Name completion (`/welcome`) — automated in `audit:http` as AUTH-70…73
+| ID | Case | Expected |
+|---|---|---|
+| AUTH-70 | No-name user visits `/dashboard` | redirected to `/welcome` before the dashboard renders (streamed as a meta refresh, not a raw 3xx -- see `lib/dal.ts`'s `verifySession()` comment) |
+| AUTH-71 | No-name user visits `/welcome` directly | renders the "What should we call you?" form, no redirect |
+| AUTH-72 | Named user visits `/welcome` directly (e.g. a stale bookmark) | bounced straight to `/dashboard`, never shown the form again |
+| AUTH-73 | Signed-out visitor visits `/welcome` | redirect to `/login`, same as any other protected route |
+| AUTH-74 | Submit a name on `/welcome` | account's `name` set, lands on `/dashboard` with the correct greeting; does not loop back to `/welcome` |
+| AUTH-75 | Submit blank/whitespace name on `/welcome` | rejected, "Name is required.", stays on the form |
 
 ---
 
@@ -328,7 +341,7 @@ under different names, so identity bugs are the main regression risk here.
 | WATCH-08 | Item on the watchlist with no price data | excluded from totals rather than counted as 0 — verify the stated behaviour is the actual one |
 | WATCH-09 | Watchlist with 100+ items | loads in reasonable time |
 | WATCH-10 | Heart a card, then delete it from the collection | watchlist unaffected (independent features) |
-| WATCH-11 | Rotating 3D watchlist card on `/collection` | renders, animates, doesn't error with 0 or 1 watchlist items |
+| WATCH-11 | Rotating 3D watchlist card on `/dashboard` | renders, animates, doesn't error with 0 or 1 watchlist items |
 | WATCH-12 | Pin a featured watchlist card | pinned card is the one shown, survives refresh |
 | WATCH-13 | Unpin | falls back to random rotation |
 | WATCH-14 | Pinned card removed from watchlist | dashboard falls back gracefully, no crash |
@@ -356,25 +369,25 @@ under different names, so identity bugs are the main regression risk here.
 | COLL-15 | Cost `1e9` / very large | no overflow, formatting stays readable |
 | COLL-16 | Cost with 3+ decimals (`1.005`) | rounded consistently with the Decimal column |
 | COLL-17 | Cost blank | stored null, shown as "—", counted in "items missing cost" |
-| COLL-18 | Add 60+ distinct items | collection page still loads; grid, charts, totals all correct |
+| COLL-18 | Add 60+ distinct items | `/dashboard` and `/portfolio` still load; grid, charts, totals all correct |
 | COLL-19 | Rapid double-submit of the add form | one item added, not two |
 | COLL-20 | UI updates without a manual refresh after add (`revalidatePath`) | yes |
 
 ---
 
-# Suite 11 — Collection dashboard & portfolio value (PORT)
+# Suite 11 — Portfolio dashboard & value (PORT)
 
 | ID | Case | Expected |
 |---|---|---|
-| PORT-01 | Empty collection | "Your collection is empty", no value cards, no charts, no NaN |
+| PORT-01 | Empty portfolio (0 items) | `/dashboard` shows "Your portfolio is empty", no KPI tiles, no charts, no NaN |
 | PORT-02 | Total / Cards / Sealed tiles | `total == cards + sealed` exactly |
 | PORT-03 | Card counts | counts sum **quantity**, and the label matches what's counted |
 | PORT-04 | Item value = latest price × condition multiplier × qty | NM 1.0, LP 0.85, MP 0.7, HP 0.5, DMG 0.3 — spot-check by hand |
 | PORT-05 | Sealed value = price × qty (no condition multiplier) | correct |
-| PORT-06 | Item with no price data | contributes 0 to value; not NaN, not `$NaN` |
+| PORT-06 | Item with no price data | contributes 0 to value; not NaN, not `$NaN`; counted in the data-quality banner's "missing price data" |
 | PORT-07 | Per-item unrealized `(market − cost) × qty` | matches hand calculation |
 | PORT-08 | Negative unrealized is amber, positive emerald, sign prefix `+`/`-` | correct |
-| PORT-09 | "Collection value over time" chart | starts no earlier than the earliest item's added date |
+| PORT-09 | "Value vs. cost basis" chart | value line starts no earlier than the earliest item's added date |
 | PORT-10 | Item added today | today's point includes it; yesterday's does not |
 | PORT-11 | Chart when all items were added today | single point / sensible degenerate case |
 | PORT-12 | **Summary vs. tiles consistency** | the sum of the per-tile market values equals the "Total value" tile (both must use the same "latest price" definition) |
@@ -382,6 +395,20 @@ under different names, so identity bugs are the main regression risk here.
 | PORT-14 | Condition multiplier applied in *both* the tile and the total | consistent |
 | PORT-15 | Currency formatting | `$1,234.56`, no floating-point tails like `$12.340000000001` |
 | PORT-16 | Timezone: an item added late at night | doesn't land on the wrong day in the chart (UTC date keys) |
+| PORT-17 | Value/profit chart **y-axis is not pinned to $0** | a small % move (e.g. $12,400 → $12,900) is visibly a curve, not a flat line near the bottom |
+| PORT-18 | Value vs. cost basis chart's shaded gap | emerald when value > cost, amber when value < cost; matches the sign of Unrealized P&L |
+| PORT-19 | Value vs. cost basis chart range toggles (1W/30D/…/All) | present when ≥ 2 ranges qualify; switching ranges re-tightens the y-axis to the visible window |
+| PORT-20 | Realized-profit chart crossing zero | dashed zero reference line rendered, still visible against both baseline modes |
+| PORT-21 | Monthly performance chart | 12 months shown oldest→newest, including $0 months with no sales; hover shows revenue, net profit, units sold |
+| PORT-22 | Top movers (30d) | gainers/losers ranked by absolute $ change; items with no price 30d ago (bought within the window) excluded, not shown as false movers |
+| PORT-23 | Top movers with < 5 gainers or < 5 losers | shows what exists, no placeholder rows, no crash |
+| PORT-24 | Allocation bars (cards vs. sealed, top holdings) | percentages sum to 100% (within rounding); bar widths match percentages |
+| PORT-25 | Inventory aging buckets (0-30/31-90/91-180/180+ days) | every item lands in exactly one bucket; bucket item counts sum to total portfolio quantity |
+| PORT-26 | Data-quality panel (Ops zone) | always renders when the portfolio is non-empty; each of the three checks (price coverage, cost coverage, freshness) shows its own state dot and plain-language detail — see DASH-30…35 for the score itself |
+| PORT-27 | Dashboard "Transactions" section | shows at most 10 rows, newest first; "View all N →" appears only when there are more than 10, links to `/transactions` |
+| PORT-28 | Dashboard "Recently added" section | shows at most 10 items, newest first; "View all N →" appears only when there are more than 10, links to `/portfolio` |
+| PORT-29 | `/portfolio` full grid | shows every holding (no 10-item cap); sort (recent/value/unrealized $/unrealized %) and type filter (all/cards/sealed) both work and combine correctly via URL params |
+| PORT-30 | `/transactions` full ledger | shows every sale, paginated; thumbnails render (including the null-image fallback for a deleted card/product) |
 
 ---
 
@@ -393,20 +420,28 @@ under different names, so identity bugs are the main regression risk here.
 | PNL-02 | Sell partial quantity | quantity decremented by exactly that amount, transaction records the sold qty |
 | PNL-03 | Sell more than owned | clamped to owned quantity |
 | PNL-04 | Sell 0 or negative | clamped to 1 or rejected — never creates a bogus row |
-| PNL-05 | Profit = `(salePrice − cost) × qty` | hand-verified |
+| PNL-05 | Profit = `(salePrice − cost) × qty − fees − shipping` | hand-verified |
 | PNL-06 | Sell an item with **no** cost basis | profit null → shown as "—", excluded from realized total |
 | PNL-07 | Sale below cost | negative profit, amber styling |
-| PNL-08 | Realized profit tile = sum of all transaction profits | exact |
+| PNL-08 | Realized profit tile = sum of all transaction profits (net of fees/shipping) | exact |
 | PNL-09 | Unrealized profit tile = Σ over items with cost of `(market×mult − cost)×qty` | exact |
 | PNL-10 | "N items missing cost" counter | matches the number of collection rows with null cost |
 | PNL-11 | Realized-profit-over-time chart is **cumulative** | running total, not per-day |
 | PNL-12 | Two sales on the same day | aggregated into one point |
-| PNL-13 | Transaction table: date, item, qty, cost, sold for, profit | all correct, newest first |
+| PNL-13 | Transaction table: date, thumbnail, item, qty, cost, sold for, fees, net profit | all correct, newest first |
 | PNL-14 | Deleting the collection item after a sale | historic transaction remains |
 | PNL-15 | Remove (not sell) an item | decrements by 1 / deletes at qty 1; **no** transaction created |
 | PNL-16 | Sell price field validation (blank, letters, huge) | handled, no NaN in the table |
-| PNL-17 | P&L section hidden when there is nothing to show | hidden for a fresh account |
+| PNL-17 | Dashboard on a fresh (0-item) account | empty state shown, no KPI tiles/charts rendered |
 | PNL-18 | Sold item's name persists even if the card is later removed from the catalog | `itemName` snapshot used |
+| PNL-19 | Sell with fees + shipping filled in | net proceeds preview = `(price × qty) − fees − shipping`, matches the stored `profit` after confirm |
+| PNL-20 | Sell with fees/shipping left blank | behaves exactly like the old formula (no fee deduction), `feesTotal`/`shippingCost` stored as null |
+| PNL-21 | Fees/shipping fields reject negative numbers | clamped or rejected, never a negative fee stored |
+| PNL-22 | Pre-existing transaction (created before this migration) | still displays its original `profit`; `feesTotal`/`shippingCost` render as "—", not $0 |
+| PNL-23 | "Total invested" KPI = Σ `costPerUnit × quantity` across all holdings | exact, matches manual sum |
+| PNL-24 | Unrealized P&L sublabel shows ROI % = `(value − invested) / invested` | exact; renders "—"/0% (not NaN/Infinity) when invested = $0 |
+| PNL-25 | Realized P&L sublabel shows net margin % = `netProfit / revenue` | exact; 0% (not NaN) when revenue = $0 |
+| PNL-26 | Each dashboard KPI tile's 30-day delta | matches `value(today) − value(30d ago)` from that metric's own history; blank/omitted when there's no data 30 days back (new account) |
 
 ---
 
@@ -517,7 +552,7 @@ These are SQL / arithmetic checks, not clicking.
 | UI-10 | Keyboard-only navigation of the main flows | focus visible, all controls reachable |
 | UI-11 | Long card names | truncate/wrap without breaking the tile |
 | UI-12 | Loading skeletons | no layout shift when content arrives |
-| UI-13 | Rotating watchlist card on mobile | doesn't overflow or trap scroll |
+| UI-13 | Rotating watchlist card on `/watchlist` (mobile) | doesn't overflow or trap scroll — moved here from `/dashboard` when the dashboard was redesigned; see the change log |
 | UI-14 | **Every `/_next/static` asset the page references returns 200** | 0 broken. A rebuild against a live checkout renames content-hashed chunks under the running server, so the HTML asks for files that no longer exist — the page returns 200 with full markup and *no CSS or JS*. Automated in `audit:http` |
 | UI-15 | Stylesheet payload is a real size (>5 KB) | catches a tree-shaken or empty sheet |
 | UI-16 | `<meta name="viewport">` present | `width=device-width, initial-scale=1` |
@@ -541,6 +576,86 @@ These are SQL / arithmetic checks, not clicking.
 | OPS-07 | Daily price sync ran (check newest `capturedDate`) | within 24–48h |
 | OPS-08 | Google OAuth redirect URIs still registered for all four origins | yes |
 | OPS-09 | Tailscale Funnel (prod) and Serve (UAT) still up | yes |
+
+---
+
+# Suite 20 — Dashboard pulse & presentation (DASH)
+
+The redesigned `/dashboard`: a rule-based "what changed this week" narrative hero
+(`lib/narrative.ts`), a persistent data-quality score, and four visually distinct
+zones (Pulse / Performance / Positions / Ops) with a holo-foil signature on the
+hero and the #1 gainer. See the change log below for what replaced what.
+
+### Narrative & hero
+| ID | Case | Expected |
+|---|---|---|
+| DASH-01 | Hero total value | equals the "Total value" KPI tile and the value-vs-cost chart's last point exactly (PORT-13, extended to the hero) |
+| DASH-02 | Baseline window | 7 days, anchored to the newest price date, not wall-clock "today" — same anchoring convention as every other delta on the page |
+| DASH-03 | Net-change fact, up week | "Up $X this week, Y% to $Z." — X/Y/Z match hand calculation |
+| DASH-04 | Net-change fact, down week | "Down $X this week, Y% to $Z." |
+| DASH-05 | Flat week (< $1 or < 0.1% move) | "Holding steady this week at $Z." — never a signed dollar amount for a sub-dollar move |
+| DASH-06 | Driver-segment fact | only appears when one segment (cards or sealed) accounts for ≥60% of the *combined absolute* movement, and that segment moved the same direction as the net change |
+| DASH-07 | Driver-segment share never exceeds 100% | even when cards and sealed moved in opposite directions (e.g. cards +$500, sealed −$300 → net +$200, cards reported as ~63%, not 250%) |
+| DASH-08 | Top-mover fact | names the single holding with the largest absolute 7-day change; sign and $/% match that holding's own numbers |
+| DASH-09 | Milestone fact — round threshold | only fires the first time a $1k/$5k/$10k/$25k/$50k/$100k/$250k threshold is crossed, and only if crossed *within* the current 7-day window (not merely still true from weeks ago) |
+| DASH-10 | Milestone fact — all-time high | only fires on a week where the value went up **and** today's value is the highest ever recorded |
+| DASH-11 | At most 3 facts shown, in order: net-change → driver-segment → top-mover → milestone | never more than 3, never a different order |
+| DASH-12 | Hero background art | always the item named in the top-mover fact — words and image never disagree |
+| DASH-13 | Hero with a driver that has no image | text renders normally, no broken image, no layout collapse |
+| DASH-14 | Hero with no resolvable mover (nothing moved, or nothing has prices at both ends of the window) | falls back to the largest holding by value, or renders with no image at all |
+| DASH-15 | Hero greeting | "Hi {first name}" renders as the single largest element on the hero, above the narrative sentence -- first name only, even for a multi-word `User.name` |
+| DASH-16 | Dollar figure(s) inside the narrative sentence | rendered larger, `font-data`, tone-colored (emerald for a gain/flat week, amber for a down week) -- distinct from the surrounding sentence text, never the whole sentence emphasized |
+| DASH-17 | Narrative sentence when the amount doesn't match any known figure (a milestone threshold, onboarding cost basis) | sentence still renders in full, plainly -- no emphasis attempted rather than a wrong split |
+| DASH-18 | No-history account (`pulse.status === "no-history"`, empty `facts`) | hero still shows a plain "Your collection is worth $X." sentence with $X emphasized, not a blank line |
+
+### Thin/no-history states
+| ID | Case | Expected |
+|---|---|---|
+| DASH-20 | Brand-new account, 0 items | `/dashboard` shows the existing empty state; no hero, no crash |
+| DASH-21 | Items added today, no price history yet | hero shows "Since you started · Today" and the onboarding sentence (item count + cost basis); no delta chip, no sparkline |
+| DASH-22 | Items with 2–6 days of history | "Since you started · N days of history"; still no fabricated 7-day delta |
+| DASH-23 | 7+ days of history | full narrative, delta chip, and sparkline all present |
+
+### Data quality score & panel
+| ID | Case | Expected |
+|---|---|---|
+| DASH-30 | Header pill percentage | matches `0.5×priceCoverage + 0.3×costCoverage + 0.2×freshness` by hand calculation |
+| DASH-31 | Header pill color | emerald at ≥90%, amber below |
+| DASH-32 | Clicking the header pill | jumps to the Ops zone's data-quality panel, sticky header doesn't cover it (UI-08) |
+| DASH-33 | Data quality panel | names each check (price coverage, cost coverage, freshness) with its own state dot and a plain-language detail line — never a bare percentage alone |
+| DASH-34 | Snapshots stale (>48h) | freshness check shows amber/fail with the actual last-updated date |
+| DASH-35 | Zero-item account | quality score is 100%, all checks "ok" — never divides by zero, never NaN |
+
+### Zones, motion & holo
+| ID | Case | Expected |
+|---|---|---|
+| DASH-40 | Four zones present: Pulse, Performance, Positions, Ops | each visually distinct (ground color/band), not four identical bordered cards |
+| DASH-41 | Section nav pills | scroll-spy highlights the zone currently in view; clicking a pill jumps to it without the sticky header covering the target |
+| DASH-42 | Holo effect | present only on the hero panel and the #1 gainer row in Top Movers — nowhere else on the page |
+| DASH-43 | Holo under `prefers-reduced-motion: reduce` | sheen is not rendered at all (not just paused) |
+| DASH-44 | Holo on touch devices (`hover: none`) | fixed dim sheen, no cursor-tracking jank |
+| DASH-45 | KPI tiles / hero number count-up | animates 0→final on first load; lands on the exact final value, never stuck mid-count |
+| DASH-46 | Count-up under `prefers-reduced-motion: reduce` | final value renders immediately, no animation, no hydration-mismatch console error |
+| DASH-47 | Chart entrance animation (value/cost line draw-in, monthly bar grow-up) | plays once on mount; never replays on hover or range-toggle re-render |
+| DASH-48 | KPI row deltas read "vs 7d" | not "vs 30d" — the dashboard's KPI window matches the hero's window |
+| DASH-49 | `/portfolio` and `/watchlist` StatTiles | still default to "vs 30d" and are visually unaffected by the dashboard redesign |
+
+### Scroll-snap dashboard slide & redesigned charts (2026-08-06)
+| ID | Case | Expected |
+|---|---|---|
+| DASH-50 | Desktop (`lg:` and up), scroll from the hero | snaps to center the stats+charts overview slide, doesn't require multiple scroll gestures to land on it |
+| DASH-51 | Continue scrolling past the overview slide | falls through to normal document flow (top movers, "Just added", transactions, footer) -- no snap fighting the scroll on that content |
+| DASH-52 | Overview slide content (4 stat tiles, value chart, allocation chart, timeline) at 1280×800 and 1440×900 | all fit without the charts themselves being compressed to illegibility; slide may exceed the viewport and scroll internally before that trade-off is made |
+| DASH-53 | Mobile / below `lg:` | no scroll-snap at all -- hero and overview render as two normal-height stacked blocks |
+| DASH-54 | "Top movers" (moved out of the fitted slide) | now renders in normal flow below the snap sequence, alongside "Just added" and transactions, not inside the overview slide |
+| DASH-55 | Value chart (`ValueBars`) | smooth gradient area fill, not columns; one vertex per real data point, no interpolated days invented between them |
+| DASH-56 | Value chart hover, full width including both edges | vertical guide line + marker + tooltip track the nearest real point continuously, no dead zones between old bar positions |
+| DASH-57 | Value chart cost-basis line | still a dashed reference line drawn over the new area fill, same "above/below what I paid" read as before |
+| DASH-58 | Allocation chart (`AllocationDonut`) with 2 categories (cards, sealed) | two concentric rings of different radii -- smaller-value category gets the smaller ring, not one shared-radius ring with two arc lengths |
+| DASH-59 | Allocation chart with exactly 1 category | single ring at the max radius, no divide-by-zero, no stray second ring |
+| DASH-60 | Allocation chart hover (ring or legend row) | highlights the matching ring, dims the rest, center label swaps to that segment's value |
+| DASH-61 | Chart entrance animations (`hero-cruise-in`, `sweep-in` value-chart draw, `ring-in` staggered rings) | each plays once on mount; hovering or toggling the chart range never replays them |
+| DASH-62 | `prefers-reduced-motion: reduce` | hero art cruise-in, idle float, and ring stagger all collapse to their end states instantly -- no motion |
 
 ---
 
@@ -592,3 +707,4 @@ sweep of detail-page failures.
 |---|---|
 | 2026-07-31 | Created. Covers every feature through commit `c7794d2`. |
 | 2026-08-02 | Added SEAL-20…36 for the TCGplayer-sourced sealed catalog (identity, dedup, type taxonomy, price cascade, filters), then automated them in `audit:data`/`audit:http`. |
+| 2026-08-06 | `/dashboard` redesigned: rule-based narrative hero (`lib/narrative.ts`), a persistent data-quality score + drill-down panel (replacing `DataQualityBanner`), four visually distinct zones with scroll-spy nav, and a holo-foil signature on the hero and the #1 gainer. Added Suite 20 (DASH-01…49). Rewrote PORT-26 to target the new data-quality panel. Moved the rotating watchlist card from `/dashboard` to `/watchlist` — reworded UI-13 accordingly. |

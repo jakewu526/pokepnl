@@ -13,6 +13,7 @@ import {
   parseLocalDate,
 } from "@/lib/chart-format";
 import { ChartDateControl } from "./ChartDateControl";
+import { ChartRangeToggle } from "./ChartRangeToggle";
 import { useAnimatedDomain } from "./useAnimatedDomain";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
@@ -40,11 +41,13 @@ export function PriceChart({
   source,
   negative = false,
   showRangeControls = false,
+  baseline = "fit",
 }: {
   points: PricePoint[];
   source: string | null;
   negative?: boolean;
   showRangeControls?: boolean;
+  baseline?: "zero" | "fit";
 }) {
   const clipId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -112,16 +115,15 @@ export function PriceChart({
 
     let minPrice: number;
     let maxPrice: number;
-    if (showRangeControls) {
-      // Tighten the y-axis to the visible prices so small moves within a short
-      // range stay legible -- a $2,044 -> $2,105 change should not look flat
-      // under a $0-based axis sized for the full multi-year range.
+    if (baseline === "fit") {
+      // Tighten the y-axis to the visible prices so small moves stay legible --
+      // a $12,400 -> $12,900 portfolio move should not look flat under a
+      // $0-based axis. No zero clamp: the whole point is to leave the floor.
       const lo = Math.min(...prices);
       const hi = Math.max(...prices);
       const span = hi - lo;
       const pad = span > 0 ? span * 0.15 : Math.max(Math.abs(hi) * 0.05, 1);
       minPrice = lo - pad;
-      if (lo >= 0) minPrice = Math.max(0, minPrice);
       maxPrice = hi + pad;
       if (maxPrice <= minPrice) maxPrice = minPrice + 1;
     } else {
@@ -133,7 +135,7 @@ export function PriceChart({
       maxPrice = maxPriceRaw === 0 ? 1 : maxPriceRaw * 1.1;
     }
     return { minDate, maxDate, minPrice, maxPrice, spanDays: (maxDate - minDate) / DAY_MS };
-  }, [visiblePoints, showRangeControls]);
+  }, [visiblePoints, baseline]);
 
   // Interpolated domain drives the scales, so switching ranges zooms/pans.
   const { domain: animated, from, animating } = useAnimatedDomain(
@@ -308,6 +310,17 @@ export function PriceChart({
             ))}
 
             <g clipPath={`url(#${clipId})`}>
+              {minPrice < 0 && maxPrice > 0 && (
+                <line
+                  x1={PAD_LEFT}
+                  x2={WIDTH - PAD_RIGHT}
+                  y1={yScale(0)}
+                  y2={yScale(0)}
+                  stroke="var(--line)"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                />
+              )}
               <path d={pathD} fill="none" stroke={lineColor} strokeWidth={2} />
               {hovered && (
                 <>
@@ -369,29 +382,16 @@ export function PriceChart({
 
       {showRangeControls && (
         <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-line pt-3">
-          {available.length >= 2 &&
-            available.map((o) => {
-              const selected = customRange == null && lookupDate == null && o.key === effectiveRange;
-              return (
-                <button
-                  key={o.key}
-                  type="button"
-                  onClick={() => {
-                    setRange(o.key);
-                    setCustomRange(null);
-                    setLookupDate(null);
-                    setHoverIndex(null);
-                  }}
-                  className={`rounded px-2.5 py-1 font-body text-xs font-medium transition ${
-                    selected
-                      ? "bg-ink text-paper"
-                      : "border border-line text-ink-muted hover:bg-paper hover:text-ink"
-                  }`}
-                >
-                  {o.label}
-                </button>
-              );
-            })}
+          <ChartRangeToggle
+            available={available}
+            selected={customRange == null && lookupDate == null ? effectiveRange : null}
+            onSelect={(key) => {
+              setRange(key);
+              setCustomRange(null);
+              setLookupDate(null);
+              setHoverIndex(null);
+            }}
+          />
 
           <ChartDateControl
             isRangeActive={customRange != null}

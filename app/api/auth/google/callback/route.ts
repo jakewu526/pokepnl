@@ -59,5 +59,5 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   await createSession(user.id);
-  return NextResponse.redirect(new URL("/collection", getRequestOrigin(request)));
+  return NextResponse.redirect(new URL("/dashboard", getRequestOrigin(request)));
 }

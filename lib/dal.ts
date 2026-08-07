@@ -18,10 +18,21 @@ export const verifySession = cache(async () => {
   // because the proxy (which only sees the JWT) keeps redirecting away from it.
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { id: true },
+    select: { id: true, name: true },
   });
   if (!user) {
     redirect("/api/auth/reset");
+  }
+
+  // Every account is supposed to have a name -- required at signup, and
+  // Google sign-in falls through to /welcome to collect one if the OAuth
+  // claim didn't include it (see app/api/auth/google/callback/route.ts and
+  // app/welcome/page.tsx). This also catches any legacy account that slipped
+  // through before the name field became required. /welcome itself must not
+  // call verifySession() for its own guard -- it uses getCurrentUser()
+  // directly -- or this would redirect to itself forever.
+  if (!user.name) {
+    redirect("/welcome");
   }
 
   return { isAuth: true, userId: session.userId };

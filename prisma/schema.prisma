@@ -109,6 +109,8 @@ model Transaction {
   quantity         Int
   costPerUnit      Decimal? @db.Decimal(10, 2)
   salePricePerUnit Decimal  @db.Decimal(10, 2)
+  feesTotal        Decimal? @db.Decimal(10, 2)
+  shippingCost     Decimal? @db.Decimal(10, 2)
   profit           Decimal? @db.Decimal(10, 2)
   soldAt           DateTime @default(now())
 

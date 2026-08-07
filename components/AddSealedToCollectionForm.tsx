@@ -49,7 +49,7 @@ export function AddSealedToCollectionForm({
         onClick={() => setOpen(true)}
         className="rounded-full bg-emerald px-4 py-2 font-body text-sm font-medium text-paper-raised transition-opacity hover:opacity-90"
       >
-        Add to collection
+        Add to portfolio
       </button>
     );
   }
@@ -135,7 +135,7 @@ export function AddSealedToCollectionForm({
           onClick={handleAdd}
           className="rounded-full bg-emerald px-4 py-2 font-body text-sm font-medium text-paper-raised transition-opacity hover:opacity-90 disabled:opacity-60"
         >
-          {pending ? "Adding…" : "Add to collection"}
+          {pending ? "Adding…" : "Add to portfolio"}
         </button>
         <button
           type="button"

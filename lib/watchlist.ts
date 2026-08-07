@@ -37,7 +37,7 @@ export type FeaturedCardOption = {
 
 // Card-only watchlist rows (sealed product rows are excluded -- the featured
 // panel renders a card front/back, not a box), used to pick a card to feature
-// on the /collection dashboard, either pinned by the user or picked at random.
+// on the /dashboard page, either pinned by the user or picked at random.
 export async function getFeaturedWatchlistCard(userId: string): Promise<FeaturedCardOption[]> {
   const rows = await prisma.watchlistItem.findMany({
     where: { userId, cardId: { not: null } },

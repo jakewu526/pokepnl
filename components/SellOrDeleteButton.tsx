@@ -16,6 +16,8 @@ export function SellOrDeleteButton({
   const [selling, setSelling] = useState(false);
   const [qtySold, setQtySold] = useState(String(quantity));
   const [salePrice, setSalePrice] = useState("");
+  const [fees, setFees] = useState("");
+  const [shipping, setShipping] = useState("");
 
   if (!selling) {
     return (
@@ -39,12 +41,27 @@ export function SellOrDeleteButton({
     );
   }
 
+  const qty = Math.max(1, Math.min(Math.floor(Number(qtySold)) || 1, quantity));
+  const parsedPrice = parseFloat(salePrice);
+  const parsedFees = parseFloat(fees);
+  const parsedShipping = parseFloat(shipping);
+  const feesValue = Number.isFinite(parsedFees) && parsedFees >= 0 ? parsedFees : 0;
+  const shippingValue = Number.isFinite(parsedShipping) && parsedShipping >= 0 ? parsedShipping : 0;
+  const netProceeds =
+    Number.isFinite(parsedPrice) && parsedPrice >= 0
+      ? parsedPrice * qty - feesValue - shippingValue
+      : null;
+
   function handleConfirm() {
-    const qty = Math.max(1, Math.min(Math.floor(Number(qtySold)) || 1, quantity));
-    const price = parseFloat(salePrice);
-    if (!Number.isFinite(price) || price < 0) return;
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) return;
     startTransition(async () => {
-      await sellCollectionItem(collectionItemId, qty, price);
+      await sellCollectionItem(
+        collectionItemId,
+        qty,
+        parsedPrice,
+        fees.trim() ? feesValue : undefined,
+        shipping.trim() ? shippingValue : undefined
+      );
       setSelling(false);
     });
   }
@@ -90,6 +107,45 @@ export function SellOrDeleteButton({
           </button>
         )}
       </div>
+      <div className="flex items-center gap-1.5">
+        <div className="relative">
+          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 font-data text-xs text-ink-muted">
+            $
+          </span>
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min="0"
+            placeholder="Fees"
+            value={fees}
+            onChange={(e) => setFees(e.target.value)}
+            aria-label="Fees"
+            className="h-8 w-20 rounded-full border border-line bg-paper-raised pl-5 pr-2 font-data text-xs text-ink outline-none focus:border-emerald"
+          />
+        </div>
+        <div className="relative">
+          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 font-data text-xs text-ink-muted">
+            $
+          </span>
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min="0"
+            placeholder="Shipping"
+            value={shipping}
+            onChange={(e) => setShipping(e.target.value)}
+            aria-label="Shipping cost"
+            className="h-8 w-24 rounded-full border border-line bg-paper-raised pl-5 pr-2 font-data text-xs text-ink outline-none focus:border-emerald"
+          />
+        </div>
+      </div>
+      {netProceeds != null && (
+        <p className="font-data text-[11px] text-ink-muted">
+          Net proceeds: <span className="font-medium text-ink">${netProceeds.toFixed(2)}</span>
+        </p>
+      )}
       <div className="flex items-center gap-3">
         <button
           type="button"

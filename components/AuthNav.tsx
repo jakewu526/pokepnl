@@ -23,8 +23,11 @@ export async function AuthNav() {
 
   return (
     <div className="flex items-center gap-3 font-body text-sm">
-      <Link href="/collection" className="font-medium text-emerald-strong hover:underline">
-        My Collection
+      <Link href="/dashboard" className="font-medium text-emerald-strong hover:underline">
+        Dashboard
+      </Link>
+      <Link href="/portfolio" className="font-medium text-emerald-strong hover:underline">
+        My Portfolio
       </Link>
       <Link href="/watchlist" className="font-medium text-emerald-strong hover:underline">
         Watchlist

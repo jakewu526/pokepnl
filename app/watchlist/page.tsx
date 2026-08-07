@@ -2,23 +2,20 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { getWatchlistData } from "@/lib/watchlist";
+import { getWatchlistData, getFeaturedWatchlistCard } from "@/lib/watchlist";
 import { getLatestPrices } from "@/lib/cards";
 import { getLatestSealedPrices } from "@/lib/sealed";
 import { AuthNav } from "@/components/AuthNav";
 import { CardTile } from "@/components/CardTile";
 import { SealedProductTile } from "@/components/SealedProductTile";
 import { PriceChart } from "@/components/PriceChart";
-
-const priceFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-});
+import { StatTile } from "@/components/StatTile";
+import { RotatingWatchlistCard } from "@/components/RotatingWatchlistCard";
 
 export default async function WatchlistPage() {
   const session = await verifySession();
 
-  const [items, data] = await Promise.all([
+  const [items, data, featuredOptions] = await Promise.all([
     prisma.watchlistItem.findMany({
       where: { userId: session.userId },
       orderBy: { createdAt: "desc" },
@@ -46,7 +43,20 @@ export default async function WatchlistPage() {
       },
     }),
     getWatchlistData(session.userId),
+    getFeaturedWatchlistCard(session.userId),
   ]);
+
+  // Picking the pinned card (or a random one) here rather than inside
+  // RotatingWatchlistCard keeps that component a pure display + pin-setter --
+  // the "which card starts featured" decision belongs to the page, same as
+  // it did on /dashboard before this card moved here.
+  const pinnedCard = featuredOptions.find((o) => o.featured);
+  // react-hooks/purity flags Math.random() as unsafe for memoized re-renders,
+  // but this is a Server Component -- it renders exactly once per request,
+  // so a fresh random pick per page load is the intended behavior, not a
+  // purity bug.
+  const randomIndex = Math.floor(Math.random() * featuredOptions.length); // eslint-disable-line react-hooks/purity
+  const featuredCard = pinnedCard ?? (featuredOptions.length ? featuredOptions[randomIndex] : null);
 
   const cardIds = items.filter((i) => i.card).map((i) => i.card!.id);
   const sealedIds = items.filter((i) => i.sealedProduct).map((i) => i.sealedProduct!.id);
@@ -76,39 +86,34 @@ export default async function WatchlistPage() {
           Watchlist
         </h1>
 
-        {items.length > 0 && (
-          <div className="mb-8 flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="rounded-card border border-line bg-paper-raised px-4 py-3">
-                <p className="font-body text-xs text-ink-muted">Total value</p>
-                <p className="font-data text-2xl font-medium text-emerald-strong">
-                  {priceFormatter.format(data.summary.totalValue)}
-                </p>
+        <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_260px] lg:items-start">
+          {items.length > 0 && (
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <StatTile label="Total value" value={data.summary.totalValue} tone="positive" />
+                <StatTile
+                  label="Cards"
+                  sublabel={String(data.summary.cardCount)}
+                  value={data.summary.cardValue}
+                />
+                <StatTile
+                  label="Sealed"
+                  sublabel={String(data.summary.sealedCount)}
+                  value={data.summary.sealedValue}
+                />
               </div>
-              <div className="rounded-card border border-line bg-paper-raised px-4 py-3">
-                <p className="font-body text-xs text-ink-muted">
-                  Cards · {data.summary.cardCount}
-                </p>
-                <p className="font-data text-2xl font-medium text-ink">
-                  {priceFormatter.format(data.summary.cardValue)}
-                </p>
-              </div>
-              <div className="rounded-card border border-line bg-paper-raised px-4 py-3">
-                <p className="font-body text-xs text-ink-muted">
-                  Sealed · {data.summary.sealedCount}
-                </p>
-                <p className="font-data text-2xl font-medium text-ink">
-                  {priceFormatter.format(data.summary.sealedValue)}
-                </p>
-              </div>
-            </div>
 
-            <div>
-              <h2 className="mb-2 font-body text-sm font-semibold text-ink">Watchlist value over time</h2>
-              <PriceChart points={data.history} source={null} />
+              <div>
+                <h2 className="mb-2 font-body text-sm font-semibold text-ink">Watchlist value over time</h2>
+                <PriceChart points={data.history} source={null} />
+              </div>
             </div>
+          )}
+
+          <div className="flex justify-center lg:sticky lg:top-24">
+            <RotatingWatchlistCard featured={featuredCard} options={featuredOptions} />
           </div>
-        )}
+        </div>
 
         {items.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-24 text-center">

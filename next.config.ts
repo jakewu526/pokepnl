@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [{ source: "/collection", destination: "/dashboard", permanent: true }];
+  },
   images: {
     remotePatterns: [
       new URL("https://images.pokemontcg.io/**"),

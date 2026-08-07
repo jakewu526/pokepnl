@@ -50,7 +50,8 @@ export async function addToCollection(
     }
   });
 
-  revalidatePath("/collection");
+  revalidatePath("/dashboard");
+  revalidatePath("/portfolio");
   revalidatePath(`/cards/${cardId}`);
 }
 
@@ -86,7 +87,8 @@ export async function batchAddToCollection(
     }
   });
 
-  revalidatePath("/collection");
+  revalidatePath("/dashboard");
+  revalidatePath("/portfolio");
   revalidatePath("/");
 }
 
@@ -124,7 +126,8 @@ export async function addSealedToCollection(
     }
   });
 
-  revalidatePath("/collection");
+  revalidatePath("/dashboard");
+  revalidatePath("/portfolio");
   revalidatePath(`/sealed/${sealedProductId}`);
 }
 
@@ -147,13 +150,16 @@ export async function removeFromCollection(collectionItemId: string): Promise<vo
     }
   });
 
-  revalidatePath("/collection");
+  revalidatePath("/dashboard");
+  revalidatePath("/portfolio");
 }
 
 export async function sellCollectionItem(
   collectionItemId: string,
   quantitySold: number,
-  salePricePerUnit: number
+  salePricePerUnit: number,
+  feesTotal?: number,
+  shippingCost?: number
 ): Promise<void> {
   const session = await verifySession();
 
@@ -166,7 +172,11 @@ export async function sellCollectionItem(
 
     const quantity = Math.max(1, Math.min(quantitySold, item.quantity));
     const costPerUnit = item.costPerUnit != null ? parseFloat(item.costPerUnit.toString()) : null;
-    const profit = costPerUnit != null ? (salePricePerUnit - costPerUnit) * quantity : null;
+    // Fees and shipping are per-SALE totals, not per-unit.
+    const profit =
+      costPerUnit != null
+        ? (salePricePerUnit - costPerUnit) * quantity - (feesTotal ?? 0) - (shippingCost ?? 0)
+        : null;
     const itemName = item.card?.name ?? item.sealedProduct?.name ?? "Unknown item";
 
     await tx.transaction.create({
@@ -179,6 +189,8 @@ export async function sellCollectionItem(
         quantity,
         costPerUnit,
         salePricePerUnit,
+        feesTotal: feesTotal ?? null,
+        shippingCost: shippingCost ?? null,
         profit,
       },
     });
@@ -193,5 +205,7 @@ export async function sellCollectionItem(
     }
   });
 
-  revalidatePath("/collection");
+  revalidatePath("/dashboard");
+  revalidatePath("/portfolio");
+  revalidatePath("/transactions");
 }

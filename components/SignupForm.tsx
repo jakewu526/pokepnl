@@ -15,7 +15,7 @@ export function SignupForm() {
         <input
           id="name"
           name="name"
-          placeholder="Optional"
+          required
           className="rounded-card border border-line bg-paper-raised px-3 py-2 font-body text-sm text-ink outline-none focus:border-emerald"
         />
         {state?.errors?.name && (

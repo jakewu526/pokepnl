@@ -13,6 +13,7 @@ import {
   parseLocalDate,
 } from "@/lib/chart-format";
 import { ChartDateControl } from "./ChartDateControl";
+import { ChartRangeToggle } from "./ChartRangeToggle";
 import { useAnimatedDomain } from "./useAnimatedDomain";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
@@ -380,29 +381,16 @@ export function GradePriceChart({ series }: { series: GradePriceSeries[] }) {
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-line pt-3">
-        {available.length >= 2 &&
-          available.map((o) => {
-            const selected = customRange == null && lookupDate == null && o.key === effectiveRange;
-            return (
-              <button
-                key={o.key}
-                type="button"
-                onClick={() => {
-                  setRange(o.key);
-                  setCustomRange(null);
-                  setLookupDate(null);
-                  setHoverIndex(null);
-                }}
-                className={`rounded px-2.5 py-1 font-body text-xs font-medium transition ${
-                  selected
-                    ? "bg-ink text-paper"
-                    : "border border-line text-ink-muted hover:bg-paper hover:text-ink"
-                }`}
-              >
-                {o.label}
-              </button>
-            );
-          })}
+        <ChartRangeToggle
+          available={available}
+          selected={customRange == null && lookupDate == null ? effectiveRange : null}
+          onSelect={(key) => {
+            setRange(key);
+            setCustomRange(null);
+            setLookupDate(null);
+            setHoverIndex(null);
+          }}
+        />
 
         <ChartDateControl
           isRangeActive={customRange != null}

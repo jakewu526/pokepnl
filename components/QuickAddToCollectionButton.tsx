@@ -121,8 +121,8 @@ export function QuickAddToCollectionButton({
         type="button"
         onClick={handleToggle}
         disabled={pending}
-        aria-label="Add to collection"
-        title="Add to collection"
+        aria-label="Add to portfolio"
+        title="Add to portfolio"
         className={`flex h-8 w-8 items-center justify-center rounded-full border border-line bg-paper-raised/90 shadow-sm backdrop-blur transition-transform hover:scale-105 disabled:opacity-70 ${className}`}
       >
         {justAdded ? (

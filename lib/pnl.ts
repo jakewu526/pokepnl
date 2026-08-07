@@ -8,19 +8,39 @@ export type PnlSummary = {
   realizedProfit: number;
   unrealizedProfit: number;
   itemsWithUnknownCost: number;
+  realizedRevenue: number;
+  realizedCogs: number;
+  realizedFees: number;
+  netMarginPct: number;
+  realizedRoiPct: number;
 };
 
 export async function getPnlSummary(userId: string): Promise<PnlSummary> {
-  const [items, realized] = await Promise.all([
+  const [items, realizedAgg] = await Promise.all([
     prisma.collectionItem.findMany({
       where: { userId },
       select: { cardId: true, sealedProductId: true, condition: true, quantity: true, costPerUnit: true },
     }),
     prisma.transaction.aggregate({
       where: { userId, profit: { not: null } },
-      _sum: { profit: true },
+      _sum: { profit: true, feesTotal: true, shippingCost: true },
     }),
   ]);
+
+  // Revenue/COGS need per-row quantity math (salePricePerUnit * quantity),
+  // which _sum can't express -- pull the rows once and reduce in JS.
+  const soldRows = await prisma.transaction.findMany({
+    where: { userId, profit: { not: null } },
+    select: { quantity: true, costPerUnit: true, salePricePerUnit: true },
+  });
+  let realizedRevenue = 0;
+  let realizedCogs = 0;
+  for (const row of soldRows) {
+    realizedRevenue += parseFloat(row.salePricePerUnit.toString()) * row.quantity;
+    if (row.costPerUnit != null) {
+      realizedCogs += parseFloat(row.costPerUnit.toString()) * row.quantity;
+    }
+  }
 
   const cardIds = items.filter((i) => i.cardId).map((i) => i.cardId!);
   const sealedIds = items.filter((i) => i.sealedProductId).map((i) => i.sealedProductId!);
@@ -49,10 +69,20 @@ export async function getPnlSummary(userId: string): Promise<PnlSummary> {
     }
   }
 
+  const realizedProfit = realizedAgg._sum.profit ? parseFloat(realizedAgg._sum.profit.toString()) : 0;
+  const realizedFees =
+    (realizedAgg._sum.feesTotal ? parseFloat(realizedAgg._sum.feesTotal.toString()) : 0) +
+    (realizedAgg._sum.shippingCost ? parseFloat(realizedAgg._sum.shippingCost.toString()) : 0);
+
   return {
-    realizedProfit: realized._sum.profit ? parseFloat(realized._sum.profit.toString()) : 0,
+    realizedProfit,
     unrealizedProfit,
     itemsWithUnknownCost,
+    realizedRevenue,
+    realizedCogs,
+    realizedFees,
+    netMarginPct: realizedRevenue !== 0 ? realizedProfit / realizedRevenue : 0,
+    realizedRoiPct: realizedCogs !== 0 ? realizedProfit / realizedCogs : 0,
   };
 }
 
@@ -85,16 +115,24 @@ export type TransactionListItem = {
   quantity: number;
   costPerUnit: number | null;
   salePricePerUnit: number;
+  feesTotal: number | null;
+  shippingCost: number | null;
   profit: number | null;
   soldAt: string;
   itemType: "card" | "sealed";
   itemId: string | null;
+  imageUrl: string | null;
 };
 
-export async function getTransactionHistory(userId: string): Promise<TransactionListItem[]> {
+export async function getTransactionHistory(userId: string, limit?: number): Promise<TransactionListItem[]> {
   const rows = await prisma.transaction.findMany({
     where: { userId },
     orderBy: { soldAt: "desc" },
+    take: limit,
+    include: {
+      card: { select: { imageUrl: true } },
+      sealedProduct: { select: { imageUrl: true } },
+    },
   });
 
   return rows.map((row) => ({
@@ -104,9 +142,15 @@ export async function getTransactionHistory(userId: string): Promise<Transaction
     quantity: row.quantity,
     costPerUnit: row.costPerUnit != null ? parseFloat(row.costPerUnit.toString()) : null,
     salePricePerUnit: parseFloat(row.salePricePerUnit.toString()),
+    feesTotal: row.feesTotal != null ? parseFloat(row.feesTotal.toString()) : null,
+    shippingCost: row.shippingCost != null ? parseFloat(row.shippingCost.toString()) : null,
     profit: row.profit != null ? parseFloat(row.profit.toString()) : null,
     soldAt: row.soldAt.toISOString().slice(0, 10),
+    // The card/sealed FKs are onDelete: SetNull, so a deleted item leaves
+    // itemName populated but both relations null -- itemId/imageUrl fall
+    // back to null rather than pointing at a row that no longer exists.
     itemType: row.cardId ? "card" : "sealed",
     itemId: row.cardId ?? row.sealedProductId ?? null,
+    imageUrl: row.card?.imageUrl ?? row.sealedProduct?.imageUrl ?? null,
   }));
 }

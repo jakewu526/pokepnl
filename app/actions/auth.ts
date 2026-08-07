@@ -5,9 +5,10 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { createSession, deleteSession } from "@/lib/session";
+import { getCurrentUser } from "@/lib/dal";
 
 const SignupSchema = z.object({
-  name: z.string().trim().min(1, { error: "Name is required." }).optional().or(z.literal("")),
+  name: z.string().trim().min(1, { error: "Name is required." }),
   email: z.email({ error: "Please enter a valid email." }).trim(),
   password: z.string().min(8, { error: "Password must be at least 8 characters." }),
 });
@@ -15,6 +16,10 @@ const SignupSchema = z.object({
 const LoginSchema = z.object({
   email: z.email({ error: "Please enter a valid email." }).trim(),
   password: z.string().min(1, { error: "Password is required." }),
+});
+
+const CompleteProfileSchema = z.object({
+  name: z.string().trim().min(1, { error: "Name is required." }),
 });
 
 export type AuthFormState =
@@ -48,12 +53,12 @@ export async function signup(_state: AuthFormState, formData: FormData): Promise
 
   const passwordHash = await hashPassword(password);
   const user = await prisma.user.create({
-    data: { email, passwordHash, name: name || null },
+    data: { email, passwordHash, name },
     select: { id: true },
   });
 
   await createSession(user.id);
-  redirect("/collection");
+  redirect("/dashboard");
 }
 
 export async function login(_state: AuthFormState, formData: FormData): Promise<AuthFormState> {
@@ -76,10 +81,35 @@ export async function login(_state: AuthFormState, formData: FormData): Promise<
   }
 
   await createSession(user.id);
-  redirect("/collection");
+  redirect("/dashboard");
 }
 
 export async function logout(): Promise<void> {
   await deleteSession();
   redirect("/login");
+}
+
+// The one-time completion step for accounts that reached /welcome with no
+// name -- a Google sign-in whose claim omitted one, or (before name became
+// required above) a legacy email account. Reads the signed-in user off the
+// session itself rather than trusting a hidden form field, so there's no way
+// to submit a name onto someone else's account.
+export async function completeProfile(_state: AuthFormState, formData: FormData): Promise<AuthFormState> {
+  const validatedFields = CompleteProfileSchema.safeParse({ name: formData.get("name") });
+
+  if (!validatedFields.success) {
+    return { errors: z.flattenError(validatedFields.error).fieldErrors };
+  }
+
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { name: validatedFields.data.name },
+  });
+
+  redirect("/dashboard");
 }

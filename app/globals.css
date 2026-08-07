@@ -112,3 +112,243 @@ input:focus-visible,
   outline: 2px solid var(--emerald);
   outline-offset: 2px;
 }
+
+/* Hides the scrollbar on swipeable strips (PortfolioCarousel) without
+   disabling scrolling -- the snap behavior and touch/trackpad scroll still
+   work, there's just no visible track cluttering a carousel that already
+   signals swipeability via the peeking next card. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Dashboard signature: an angled prismatic sheen that tracks the cursor,
+   restricted to a soft radial mask so it reads as a holo-foil highlight
+   rather than a full-surface gradient. --holo-x/--holo-y are written
+   directly by HoloSurface via el.style.setProperty(), never React state. */
+@property --holo-x {
+  syntax: "<percentage>";
+  initial-value: 50%;
+  inherits: false;
+}
+@property --holo-y {
+  syntax: "<percentage>";
+  initial-value: 50%;
+  inherits: false;
+}
+
+.holo {
+  position: relative;
+  isolation: isolate; /* keeps mix-blend-mode compositing against this panel, not the page */
+}
+.holo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(
+    115deg,
+    transparent 20%,
+    color-mix(in oklch, var(--series-violet) 55%, transparent) 36%,
+    color-mix(in oklch, var(--series-aqua) 55%, transparent) 44%,
+    color-mix(in oklch, var(--series-yellow) 55%, transparent) 52%,
+    color-mix(in oklch, var(--series-red) 55%, transparent) 60%,
+    transparent 76%
+  );
+  -webkit-mask-image: radial-gradient(220px 220px at var(--holo-x) var(--holo-y), #000 0%, transparent 70%);
+  mask-image: radial-gradient(220px 220px at var(--holo-x) var(--holo-y), #000 0%, transparent 70%);
+  mix-blend-mode: overlay;
+  opacity: 0.16;
+  transition: opacity 240ms ease;
+}
+.holo:hover::after {
+  opacity: 0.3;
+}
+@media (prefers-color-scheme: dark) {
+  .holo::after {
+    mix-blend-mode: screen;
+    opacity: 0.22;
+  }
+  .holo:hover::after {
+    opacity: 0.42;
+  }
+}
+@media (hover: none) {
+  /* No cursor to track on touch -- show a fixed, gentler sheen instead of a
+     mask permanently pinned to whatever --holo-x/--holo-y defaulted to. */
+  .holo::after {
+    mask-image: none;
+    -webkit-mask-image: none;
+    opacity: 0.12;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .holo::after {
+    display: none;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes draw-in {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes grow-up {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.rise-in {
+  animation: rise-in 420ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.draw-in {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw-in 900ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.grow-up {
+  /* Without fill-box, percentage transform-origin keywords on an SVG shape
+     resolve against the whole viewport, not the shape's own bounding box --
+     every bar would appear to scale from the bottom of the *canvas*, not its
+     own base. fill-box makes "bottom" mean *this rect's* bottom edge. */
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: grow-up 520ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* --- Hero art entrance ------------------------------------------------------
+   The wrapper's one-time "fall in from the upper right" on mount -- traced
+   from design/inspiration/Playing Card Falling.mp4: a tilted card drops in
+   from off-screen, rotating flat as it settles, with a small overshoot at
+   the landing rather than stopping dead. Slower than a typical UI transition
+   (1500ms) on purpose -- the first cut of this was 780ms and read as a
+   glitch, not a fall. This is a separate animation layer from .hero-art's
+   continuous idle float below: the wrapper plays this once, then .hero-art
+   keeps floating underneath it, so the two never fight over the same
+   transform. */
+@keyframes hero-card-fall {
+  0% {
+    opacity: 0;
+    transform: translate(180px, -160px) rotate(20deg) scale(0.92);
+  }
+  65% {
+    opacity: 1;
+    transform: translate(-8px, 6px) rotate(-4deg) scale(1.015);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+.hero-card-fall {
+  animation: hero-card-fall 1500ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* --- Hero art -------------------------------------------------------------
+   The one place the app allows continuous motion. Amplitude is deliberately
+   tiny (4px over 7s) -- enough that the card reads as floating rather than
+   pasted down, small enough that it never pulls the eye off the numbers. */
+@keyframes hero-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.hero-art {
+  animation: hero-float 7s ease-in-out infinite;
+  filter: drop-shadow(0 18px 28px rgb(0 0 0 / 0.18)) drop-shadow(0 2px 6px rgb(0 0 0 / 0.12));
+  transition: transform 420ms cubic-bezier(0.22, 0.61, 0.36, 1), filter 420ms ease;
+}
+.hero-art:hover {
+  animation-play-state: paused;
+  transform: translateY(-8px) scale(1.02);
+  filter: drop-shadow(0 28px 40px rgb(0 0 0 / 0.24)) drop-shadow(0 3px 8px rgb(0 0 0 / 0.16));
+}
+@media (prefers-color-scheme: dark) {
+  .hero-art {
+    filter: drop-shadow(0 18px 32px rgb(0 0 0 / 0.5));
+  }
+  .hero-art:hover {
+    filter: drop-shadow(0 26px 44px rgb(0 0 0 / 0.62));
+  }
+}
+
+/* --- Chart marks ----------------------------------------------------------
+   Every chart mark responds to the cursor. Without this the charts are inert
+   to touch as well as flat to look at. */
+@keyframes sweep-in {
+  from {
+    stroke-dashoffset: var(--sweep-length);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.sweep-in {
+  animation: sweep-in 900ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.mark-hover {
+  transition: opacity 160ms ease, fill 160ms ease;
+}
+
+/* Concentric allocation rings sweep in smallest-first, each ring fading and
+   scaling up on its own delay -- this animates opacity/transform only, never
+   the ring's own stroke-dashoffset, because that property is already spoken
+   for (it places the arc at its correct rotational offset around the
+   circle). Combining a draw-in dashoffset animation with a placement
+   dashoffset would fight itself; scale+fade sidesteps that entirely while
+   still reading as each ring "growing in" in turn. */
+@keyframes ring-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.ring-in {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ring-in 480ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-art {
+    animation: none;
+  }
+  .hero-card-fall {
+    animation: none;
+  }
+  .ring-in {
+    animation: none;
+  }
+}

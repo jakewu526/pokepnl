@@ -56,3 +56,7 @@ desktop.ini
 
 # nssm service stdout/stderr redirect (prod and UAT checkouts both accumulate one)
 nssm-service.log
+
+# design inspiration screenshots (other companies' real products — reference
+# only, never ship these)
+/design/inspiration/

@@ -17,7 +17,7 @@ export async function AddSealedToCollectionButton({
         href="/login"
         className="inline-block rounded-full border border-line px-4 py-2 font-body text-sm font-medium text-ink-muted hover:text-ink"
       >
-        Log in to add to collection
+        Log in to add to portfolio
       </Link>
     );
   }

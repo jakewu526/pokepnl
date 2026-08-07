@@ -42,7 +42,7 @@ export async function setFeaturedWatchlistCard(watchlistItemId: string | null): 
         ]
       : []),
   ]);
-  revalidatePath("/collection");
+  revalidatePath("/dashboard");
 }
 
 export async function addSealedToWatchlist(sealedProductId: string): Promise<void> {

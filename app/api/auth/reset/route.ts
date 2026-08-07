@@ -8,7 +8,7 @@ import { deleteSession } from "@/lib/session";
 // one environment overwrites the other's session cookie.)
 //
 // The proxy only sees the JWT, so it treats that cookie as signed in and
-// bounces /login and /signup to /collection, while every DB-backed lookup
+// bounces /login and /signup to /dashboard, while every DB-backed lookup
 // says signed out -- leaving no way to log back in. Clearing the cookie is a
 // mutation, which a Server Component can't do during render, so the ghost
 // check in lib/dal.ts redirects here instead.
