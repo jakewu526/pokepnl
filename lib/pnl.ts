@@ -154,3 +154,44 @@ export async function getTransactionHistory(userId: string, limit?: number): Pro
     imageUrl: row.card?.imageUrl ?? row.sealedProduct?.imageUrl ?? null,
   }));
 }
+
+export type PurchaseListItem = {
+  id: string;
+  itemName: string;
+  condition: string | null;
+  quantity: number;
+  costPerUnit: number | null;
+  purchasedAt: string;
+  itemType: "card" | "sealed";
+  itemId: string | null;
+  imageUrl: string | null;
+};
+
+// The "buying" side of the transaction history. There's no separate
+// per-purchase ledger -- costPerUnit/createdAt on CollectionItem already are
+// the purchase price and date (captured once, at add-to-collection time), so
+// this reads current holdings the same way getTransactionHistory reads sales,
+// rather than introducing a new table.
+export async function getPurchaseHistory(userId: string, limit?: number): Promise<PurchaseListItem[]> {
+  const rows = await prisma.collectionItem.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    include: {
+      card: { select: { name: true, imageUrl: true } },
+      sealedProduct: { select: { name: true, imageUrl: true } },
+    },
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    itemName: row.card?.name ?? row.sealedProduct?.name ?? "Unknown item",
+    condition: row.condition,
+    quantity: row.quantity,
+    costPerUnit: row.costPerUnit != null ? parseFloat(row.costPerUnit.toString()) : null,
+    purchasedAt: row.createdAt.toISOString().slice(0, 10),
+    itemType: row.cardId ? "card" : "sealed",
+    itemId: row.cardId ?? row.sealedProductId ?? null,
+    imageUrl: row.card?.imageUrl ?? row.sealedProduct?.imageUrl ?? null,
+  }));
+}

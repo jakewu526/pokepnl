@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { CollectionTimeline as TimelineData, TimelineDay } from "@/lib/dashboard";
 import { parseLocalDate } from "@/lib/chart-format";
+import { DayActivityModal } from "@/components/DayActivityModal";
 
 const priceFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const dayFormatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
@@ -25,6 +26,7 @@ function hasActivity(day: TimelineDay): boolean {
 // other components in one viewport rather than having a page to itself.
 export function CollectionTimeline({ timeline, compact = false }: { timeline: TimelineData; compact?: boolean }) {
   const [hover, setHover] = useState<number | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const { days } = timeline;
   if (days.length === 0) return null;
@@ -32,6 +34,16 @@ export function CollectionTimeline({ timeline, compact = false }: { timeline: Ti
   const peak = Math.max(1, ...days.map((d) => Math.max(d.added.count, d.sold.count)));
   const active = hover != null ? days[hover] : null;
   const dense = days.length > 90;
+
+  // Tooltip tracks the hovered column horizontally instead of always sitting
+  // centered over the whole rail -- at 365 columns "centered" could be
+  // anywhere from the actual hovered day. Clamped so it never runs off the
+  // card's edge for a day near either end of the rail.
+  const leftPercent = hover != null ? Math.min(94, Math.max(6, ((hover + 0.5) / days.length) * 100)) : 50;
+  // Placed on whichever side has less going on for that day, so it never
+  // covers the taller bar: above when "added" is the bigger (or only) bar,
+  // below when "sold" dominates.
+  const placement: "above" | "below" = active && active.sold.count > active.added.count ? "below" : "above";
 
   return (
     <div className="rounded-card border border-line bg-paper-raised p-4 sm:p-5">
@@ -48,47 +60,57 @@ export function CollectionTimeline({ timeline, compact = false }: { timeline: Ti
       )}
 
       <div className={`relative ${compact ? "mt-3" : ""}`} onPointerLeave={() => setHover(null)}>
-        {/* Tooltip is pinned above the rail rather than following the cursor --
-            at 365 columns the columns are thinner than the pointer. */}
-        {active && hasActivity(active) && (
-          <div className="pointer-events-none absolute -top-1 left-0 right-0 z-10 flex justify-center">
-            <div className="rounded border border-line bg-paper-raised px-2.5 py-1.5 shadow-sm">
-              <p className="font-body text-[11px] text-ink-muted">
-                {longDayFormatter.format(parseLocalDate(active.date))}
-              </p>
-              {active.added.count > 0 && (
-                <p className="font-data text-[11px] font-medium text-emerald-strong">
-                  +{active.added.count} added
-                  {active.added.amount > 0 && ` · ${priceFormatter.format(active.added.amount)}`}
+        <div className={`relative flex items-stretch gap-px ${compact ? "h-[64px] pt-6" : "h-[104px] pt-8"}`}>
+          {/* Tooltip follows the hovered day and flips above/below the rail
+              depending on which side has less bar to cover. */}
+          {active && hasActivity(active) && (
+            <div
+              className="pointer-events-none absolute z-10"
+              style={{
+                left: `${leftPercent}%`,
+                transform: "translateX(-50%)",
+                ...(placement === "above" ? { bottom: "100%", marginBottom: 4 } : { top: "100%", marginTop: 4 }),
+              }}
+            >
+              <div className="rounded border border-line bg-paper-raised px-2.5 py-1.5 shadow-sm">
+                <p className="font-body text-[11px] text-ink-muted">
+                  {longDayFormatter.format(parseLocalDate(active.date))}
                 </p>
-              )}
-              {active.sold.count > 0 && (
-                <p className="font-data text-[11px] font-medium text-series-blue">
-                  {active.sold.count} sold · {priceFormatter.format(active.sold.amount)}
-                </p>
-              )}
-              {(active.added.names.length > 0 || active.sold.names.length > 0) && (
-                <p className="mt-0.5 max-w-[220px] truncate font-body text-[11px] text-ink-muted">
-                  {[...active.added.names, ...active.sold.names].join(", ")}
-                </p>
-              )}
+                {active.added.count > 0 && (
+                  <p className="font-data text-[11px] font-medium text-emerald-strong">
+                    +{active.added.count} added
+                    {active.added.amount > 0 && ` · ${priceFormatter.format(active.added.amount)}`}
+                  </p>
+                )}
+                {active.sold.count > 0 && (
+                  <p className="font-data text-[11px] font-medium text-series-blue">
+                    {active.sold.count} sold · {priceFormatter.format(active.sold.amount)}
+                  </p>
+                )}
+                {(active.added.names.length > 0 || active.sold.names.length > 0) && (
+                  <p className="mt-0.5 max-w-[220px] truncate font-body text-[11px] text-ink-muted">
+                    {[...active.added.names, ...active.sold.names].join(", ")}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-
-        <div className={`flex items-stretch gap-px ${compact ? "h-[64px] pt-6" : "h-[104px] pt-8"}`}>
+          )}
           {days.map((day, i) => {
             const barMax = compact ? 16 : 28;
             const addedH = (day.added.count / peak) * barMax;
             const soldH = (day.sold.count / peak) * barMax;
             const isHovered = hover === i;
             const isToday = i === days.length - 1;
+            const clickable = hasActivity(day);
 
             return (
               <div
                 key={day.date}
-                className="group relative flex min-w-0 flex-1 flex-col items-center justify-center"
+                className={`group relative flex min-w-0 flex-1 flex-col items-center justify-center ${
+                  clickable ? "cursor-pointer" : ""
+                }`}
                 onPointerEnter={() => setHover(i)}
+                onClick={() => clickable && setSelectedDate(day.date)}
               >
                 {/* Added: grows upward from the rail */}
                 <div className="flex w-full flex-1 items-end justify-center pb-px">
@@ -145,6 +167,8 @@ export function CollectionTimeline({ timeline, compact = false }: { timeline: Ti
           </span>
         </div>
       </div>
+
+      <DayActivityModal date={selectedDate} onClose={() => setSelectedDate(null)} />
     </div>
   );
 }

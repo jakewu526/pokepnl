@@ -351,4 +351,7 @@ input:focus-visible,
   .ring-in {
     animation: none;
   }
+  .sweep-in {
+    animation: none;
+  }
 }

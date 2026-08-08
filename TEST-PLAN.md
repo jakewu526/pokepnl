@@ -405,7 +405,9 @@ under different names, so identity bugs are the main regression risk here.
 | PORT-24 | Allocation bars (cards vs. sealed, top holdings) | percentages sum to 100% (within rounding); bar widths match percentages |
 | PORT-25 | Inventory aging buckets (0-30/31-90/91-180/180+ days) | every item lands in exactly one bucket; bucket item counts sum to total portfolio quantity |
 | PORT-26 | Data-quality panel (Ops zone) | always renders when the portfolio is non-empty; each of the three checks (price coverage, cost coverage, freshness) shows its own state dot and plain-language detail — see DASH-30…35 for the score itself |
-| PORT-27 | Dashboard "Transactions" section | shows at most 10 rows, newest first; "View all N →" appears only when there are more than 10, links to `/transactions` |
+| PORT-27 | Dashboard "Selling" table | shows at most 10 rows, newest first; "View all N →" appears only when there are more than 10, links to `/transactions` |
+| PORT-27b | Dashboard "Buying" table | reads `CollectionItem.costPerUnit`/`createdAt` (no separate purchase form); shows at most 10 rows, newest first; "View all N →" appears only when there are more than 10, links to `/portfolio` |
+| PORT-27c | Buying/Selling tables independently empty | a brand-new account with only purchases (no sales) shows just "Buying", no empty "Selling" heading, and vice versa; both empty renders nothing (not two empty headings) |
 | PORT-28 | Dashboard "Recently added" section | shows at most 10 items, newest first; "View all N →" appears only when there are more than 10, links to `/portfolio` |
 | PORT-29 | `/portfolio` full grid | shows every holding (no 10-item cap); sort (recent/value/unrealized $/unrealized %) and type filter (all/cards/sealed) both work and combine correctly via URL params |
 | PORT-30 | `/transactions` full ledger | shows every sale, paginated; thumbnails render (including the null-image fallback for a deleted card/product) |
@@ -645,7 +647,7 @@ hero and the #1 gainer. See the change log below for what replaced what.
 |---|---|---|
 | DASH-50 | Desktop (`lg:` and up), scroll from the hero | snaps to center the stats+charts overview slide, doesn't require multiple scroll gestures to land on it |
 | DASH-51 | Continue scrolling past the overview slide | falls through to normal document flow (top movers, "Just added", transactions, footer) -- no snap fighting the scroll on that content |
-| DASH-52 | Overview slide content (4 stat tiles, value chart, allocation chart, timeline) at 1280×800 and 1440×900 | all fit without the charts themselves being compressed to illegibility; slide may exceed the viewport and scroll internally before that trade-off is made |
+| DASH-52 | Overview slide content (4 stat tiles, value chart, allocation chart, timeline) at 1280×800 and 1440×900 | all fit without the charts themselves being compressed to illegibility; slide may exceed the viewport (`min-h-full`, not `h-full`) and scroll internally before that trade-off is made |
 | DASH-53 | Mobile / below `lg:` | no scroll-snap at all -- hero and overview render as two normal-height stacked blocks |
 | DASH-54 | "Top movers" (moved out of the fitted slide) | now renders in normal flow below the snap sequence, alongside "Just added" and transactions, not inside the overview slide |
 | DASH-55 | Value chart (`ValueBars`) | smooth gradient area fill, not columns; one vertex per real data point, no interpolated days invented between them |
@@ -654,8 +656,14 @@ hero and the #1 gainer. See the change log below for what replaced what.
 | DASH-58 | Allocation chart (`AllocationDonut`) with 2 categories (cards, sealed) | two concentric rings of different radii -- smaller-value category gets the smaller ring, not one shared-radius ring with two arc lengths |
 | DASH-59 | Allocation chart with exactly 1 category | single ring at the max radius, no divide-by-zero, no stray second ring |
 | DASH-60 | Allocation chart hover (ring or legend row) | highlights the matching ring, dims the rest, center label swaps to that segment's value |
-| DASH-61 | Chart entrance animations (`hero-card-fall`, `sweep-in` value-chart draw, `ring-in` staggered rings) | each plays once on mount; hovering or toggling the chart range never replays them |
-| DASH-62 | `prefers-reduced-motion: reduce` | hero art cruise-in, idle float, and ring stagger all collapse to their end states instantly -- no motion |
+| DASH-61 | Chart entrance animations (`hero-card-fall`, `sweep-in` value-chart draw, `ring-in` staggered rings) | `hero-card-fall` plays on mount (hero is visible immediately); `sweep-in`/`ring-in` are gated by `DashboardOverview`'s `IntersectionObserver` and play once the overview slide scrolls into view, not on mount; hovering or toggling the chart range never replays them |
+| DASH-62 | `prefers-reduced-motion: reduce` | hero art cruise-in, idle float, `sweep-in` line draw, and `ring-in` stagger all collapse to their end states instantly -- no motion |
+| DASH-63 | Overview chart entrance replay | after `sweep-in`/`ring-in` have played once, scroll back up to the hero and back down to the overview slide again -- animation does not replay (the observer disconnects after its first hit) |
+| DASH-64 | Hero clipping, short viewport or long name | at a short window height (or a temporarily long test display name forcing the `h1` to wrap), the top of "Hi {name}" and the net-change sentence are never cut off -- the hero section grows (`min-h-full`) instead of clipping |
+| DASH-65 | Overview clipping, short viewport | at a short window height, the bottom of the overview slide (particularly the timeline, the last element) is never cut off -- the section grows instead of clipping |
+| DASH-66 | Timeline hover tooltip position | tracks the hovered day horizontally (not always centered on the whole rail) and flips above the rail when that day's "added" activity is ≥ "sold", below when "sold" dominates -- never overlaps the taller bar |
+| DASH-67 | Timeline day click, day with activity | opens a modal titled with that date; shows a "Buying" table (rows from `CollectionItem.createdAt` that day), a "Selling" table (rows from `Transaction.soldAt` that day), or both; closes on Escape or backdrop click |
+| DASH-68 | Timeline day click, day with no activity | no cursor-pointer affordance, click does nothing, no modal, no request fired |
 
 ---
 
@@ -709,3 +717,4 @@ sweep of detail-page failures.
 | 2026-07-31 | Created. Covers every feature through commit `c7794d2`. |
 | 2026-08-02 | Added SEAL-20…36 for the TCGplayer-sourced sealed catalog (identity, dedup, type taxonomy, price cascade, filters), then automated them in `audit:data`/`audit:http`. |
 | 2026-08-06 | `/dashboard` redesigned: rule-based narrative hero (`lib/narrative.ts`), a persistent data-quality score + drill-down panel (replacing `DataQualityBanner`), four visually distinct zones with scroll-spy nav, and a holo-foil signature on the hero and the #1 gainer. Added Suite 20 (DASH-01…49). Rewrote PORT-26 to target the new data-quality panel. Moved the rotating watchlist card from `/dashboard` to `/watchlist` — reworded UI-13 accordingly. |
+| 2026-08-07 (later) | Fixed hero/overview clipping (`h-full`→`min-h-full` on the two snap sections and `DashboardOverview`'s root — DASH-52/64/65). Gated the value-chart sweep and donut ring-in to a one-time `IntersectionObserver` trigger on the overview slide instead of firing on mount (DASH-61/63). Timeline hover tooltip now tracks the hovered day and flips above/below instead of always centering (DASH-66). Timeline days are now clickable through to a new day-detail modal showing that date's Buying/Selling rows (DASH-67/68), backed by `getDayActivity`/`getDayActivityAction`. Split the dashboard's transactions table into separate Buying (`getPurchaseHistory`, reads existing `CollectionItem.costPerUnit`/`createdAt` — no new entry form) and Selling tables (PORT-27/27b/27c). |

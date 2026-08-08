@@ -32,7 +32,17 @@ const SEGMENT_COLORS = [
 // begin with. Segments are walked smallest-to-largest for both the radius
 // assignment *and* the cumulative arc offset, so the whole shape reads as
 // one continuous spiral rather than unrelated rings.
-export function AllocationDonut({ slices, total }: { slices: Slice[]; total: number }) {
+export function AllocationDonut({
+  slices,
+  total,
+  animate = true,
+}: {
+  slices: Slice[];
+  total: number;
+  /** Gates the ring-in stagger -- false renders the rings invisible until the
+      caller flips this once the chart has scrolled into view. */
+  animate?: boolean;
+}) {
   const [hover, setHover] = useState<number | null>(null);
 
   const drawable = [...slices].filter((s) => s.value > 0).sort((a, b) => a.value - b.value);
@@ -87,7 +97,7 @@ export function AllocationDonut({ slices, total }: { slices: Slice[]; total: num
                 return (
                   <circle
                     key={slice.label}
-                    className="ring-in mark-hover"
+                    className={animate ? "ring-in mark-hover" : "mark-hover"}
                     cx={SIZE / 2}
                     cy={SIZE / 2}
                     r={radius}
@@ -97,7 +107,7 @@ export function AllocationDonut({ slices, total }: { slices: Slice[]; total: num
                     strokeWidth={hover === i ? STROKE + 5 : STROKE}
                     strokeDasharray={`${Math.max(0, length - 1.5)} ${circumference - Math.max(0, length - 1.5)}`}
                     strokeDashoffset={-offset}
-                    opacity={hover == null || hover === i ? 1 : 0.35}
+                    opacity={animate ? (hover == null || hover === i ? 1 : 0.35) : 0}
                     style={{
                       transition: "stroke-width 200ms ease, opacity 160ms ease",
                       animationDelay: `${i * 90}ms`,

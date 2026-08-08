@@ -11,7 +11,7 @@ import { PortfolioCarousel } from "@/components/PortfolioCarousel";
 import { CONDITION_LABELS, CONDITION_MULTIPLIERS, type Condition } from "@/lib/condition";
 import { SEALED_TYPE_LABELS, type SealedProductType } from "@/lib/sealed";
 import { getPortfolioData, deltaOverDays } from "@/lib/portfolio";
-import { getPnlSummary, getRealizedProfitHistory, getTransactionHistory } from "@/lib/pnl";
+import { getPnlSummary, getRealizedProfitHistory, getTransactionHistory, getPurchaseHistory } from "@/lib/pnl";
 import { getTopMovers, getAllocation, getCollectionTimeline } from "@/lib/dashboard";
 import { getLatestPrices } from "@/lib/cards";
 import { getLatestSealedPrices } from "@/lib/sealed";
@@ -42,6 +42,7 @@ export default async function DashboardPage() {
     portfolio,
     pnl,
     profitHistory,
+    purchases,
     transactions,
     transactionCount,
     topMovers,
@@ -81,6 +82,7 @@ export default async function DashboardPage() {
     getPortfolioData(session.userId),
     getPnlSummary(session.userId),
     getRealizedProfitHistory(session.userId),
+    getPurchaseHistory(session.userId, RECENT_LIMIT),
     getTransactionHistory(session.userId, RECENT_LIMIT),
     prisma.transaction.count({ where: { userId: session.userId } }),
     getTopMovers(session.userId),
@@ -161,40 +163,46 @@ export default async function DashboardPage() {
 
       <main className="flex-1">
         {hasPortfolio ? (
-          <>
-            {/* The two "slide" sections: hero, then the fitted stats+charts
-                overview. Scroll-snap only engages at lg: and up -- fitting 4
-                stat tiles and 3 charts into one phone viewport isn't a
-                legible goal, so below lg this is just two normal-height
-                blocks in ordinary flow. Everything after this container
-                (top movers, just added, transactions) is deliberately
-                outside the snap sequence: a snap-mandatory container
-                spanning a long tile grid fights the user's scroll on every
-                item, which is not what "snap to the next slide" should feel
-                like past the second slide. */}
-            <div className="lg:h-[calc(100dvh-4.5rem)] lg:snap-y lg:snap-mandatory lg:overflow-y-auto">
-              <section className="lg:h-full lg:snap-start">
-                <CollectionHero pulse={pulse} art={heroArt} firstName={firstName} />
-              </section>
-              <section className="lg:h-full lg:snap-start">
-                <DashboardOverview
-                  totalValue={portfolio.summary.totalValue}
-                  costBasis={portfolio.summary.costBasis}
-                  unrealizedProfit={unrealizedProfit}
-                  realizedProfit={pnl.realizedProfit}
-                  valueDelta7d={valueDelta7d}
-                  investedDelta7d={investedDelta7d}
-                  unrealizedDelta7d={unrealizedDelta7d}
-                  realizedDelta7d={realizedDelta7d}
-                  valuePoints={portfolio.history}
-                  costBasisPoints={portfolio.costBasisHistory}
-                  allocationSlices={allocation.byType}
-                  timeline={timeline}
-                />
-              </section>
-            </div>
+          // One scroller, not two. This whole block -- hero, overview, top
+          // movers, just added, transactions, footer -- lives inside a
+          // single `lg:overflow-y-auto` box, so there's exactly one
+          // scrollbar/scroll gesture for the whole page at lg: and up.
+          // Only the hero and overview sections get `snap-start`; everything
+          // after them scrolls through normally without snapping. (Two
+          // independent scroll regions -- this bounded box plus the outer
+          // document -- used to fight each other: scrolling inside the box
+          // never reached what was below it, and vice versa.) Below lg this
+          // is unconstrained and just normal single-scroller document flow.
+          //
+          // `snap-proximity`, not `snap-mandatory`: mandatory forces the
+          // scroll position to always rest on a snap point, but only the
+          // first two sections have one -- past them, mandatory kept
+          // dragging the page back to the overview slide instead of letting
+          // the user continue down to top movers/transactions/footer.
+          // Proximity only snaps when already close to a snap point and
+          // never fights a scroll gesture headed past the last one.
+          <div className="lg:h-[calc(100dvh-4.5rem)] lg:snap-y lg:snap-proximity lg:overflow-y-auto">
+            <section className="lg:min-h-full lg:snap-start">
+              <CollectionHero pulse={pulse} art={heroArt} firstName={firstName} />
+            </section>
+            <section className="lg:min-h-full lg:snap-start">
+              <DashboardOverview
+                totalValue={portfolio.summary.totalValue}
+                costBasis={portfolio.summary.costBasis}
+                unrealizedProfit={unrealizedProfit}
+                realizedProfit={pnl.realizedProfit}
+                valueDelta7d={valueDelta7d}
+                investedDelta7d={investedDelta7d}
+                unrealizedDelta7d={unrealizedDelta7d}
+                realizedDelta7d={realizedDelta7d}
+                valuePoints={portfolio.history}
+                costBasisPoints={portfolio.costBasisHistory}
+                allocationSlices={allocation.byType}
+                timeline={timeline}
+              />
+            </section>
 
-            <div className="mx-auto flex max-w-6xl flex-col gap-10 px-4 pt-10 pb-16 sm:px-6">
+            <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 pt-10 pb-16 sm:px-6">
               <TopMovers gainers={topMovers.gainers} losers={topMovers.losers} />
 
               <div>
@@ -258,9 +266,21 @@ export default async function DashboardPage() {
                 </PortfolioCarousel>
               </div>
 
-              <RecentTransactions transactions={transactions} totalCount={transactionCount} />
+              <RecentTransactions
+                purchases={purchases}
+                purchaseCount={itemCount}
+                transactions={transactions}
+                totalCount={transactionCount}
+              />
             </div>
-          </>
+
+            {/* Same scroller as everything above -- a second, separately
+                positioned <footer> sibling would reintroduce exactly the
+                two-scroller problem this layout exists to avoid. */}
+            <div className="border-t border-line px-4 py-4 text-center font-data text-xs text-ink-muted sm:px-6">
+              {itemCount} card{itemCount === 1 ? "" : "s"} in your binder
+            </div>
+          </div>
         ) : (
           <div className="mx-auto flex max-w-6xl flex-col items-center gap-2 px-4 py-24 text-center sm:px-6">
             <p className="font-body text-lg font-medium text-ink">Your collection is empty</p>
@@ -271,9 +291,11 @@ export default async function DashboardPage() {
         )}
       </main>
 
-      <footer className="border-t border-line px-4 py-4 text-center font-data text-xs text-ink-muted sm:px-6">
-        {itemCount} card{itemCount === 1 ? "" : "s"} in your binder
-      </footer>
+      {!hasPortfolio && (
+        <footer className="border-t border-line px-4 py-4 text-center font-data text-xs text-ink-muted sm:px-6">
+          {itemCount} card{itemCount === 1 ? "" : "s"} in your binder
+        </footer>
+      )}
     </div>
   );
 }

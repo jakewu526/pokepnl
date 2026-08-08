@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { buildPortfolioSeries, itemValueAt } from "@/lib/portfolio";
+import type { PurchaseListItem, TransactionListItem } from "@/lib/pnl";
 
 const DAY_MS = 86_400_000;
 
@@ -428,4 +429,68 @@ export async function getCollectionTimeline(userId: string): Promise<CollectionT
     totalAdded: items.reduce((sum, i) => sum + i.quantity, 0),
     totalSold: transactions.reduce((sum, t) => sum + t.quantity, 0),
   };
+}
+
+export type DayActivity = {
+  date: string;
+  purchases: PurchaseListItem[];
+  sales: TransactionListItem[];
+};
+
+// The full-detail counterpart to a single day of getCollectionTimeline's
+// aggregates -- same two tables, same day, but real rows instead of counts,
+// for the click-through modal on the timeline.
+export async function getDayActivity(userId: string, date: string): Promise<DayActivity> {
+  const start = new Date(`${date}T00:00:00`);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+
+  const [items, transactions] = await Promise.all([
+    prisma.collectionItem.findMany({
+      where: { userId, createdAt: { gte: start, lt: end } },
+      orderBy: { createdAt: "desc" },
+      include: {
+        card: { select: { name: true, imageUrl: true } },
+        sealedProduct: { select: { name: true, imageUrl: true } },
+      },
+    }),
+    prisma.transaction.findMany({
+      where: { userId, soldAt: { gte: start, lt: end } },
+      orderBy: { soldAt: "desc" },
+      include: {
+        card: { select: { imageUrl: true } },
+        sealedProduct: { select: { imageUrl: true } },
+      },
+    }),
+  ]);
+
+  const purchases: PurchaseListItem[] = items.map((row) => ({
+    id: row.id,
+    itemName: row.card?.name ?? row.sealedProduct?.name ?? "Unknown item",
+    condition: row.condition,
+    quantity: row.quantity,
+    costPerUnit: row.costPerUnit != null ? parseFloat(row.costPerUnit.toString()) : null,
+    purchasedAt: row.createdAt.toISOString().slice(0, 10),
+    itemType: row.cardId ? "card" : "sealed",
+    itemId: row.cardId ?? row.sealedProductId ?? null,
+    imageUrl: row.card?.imageUrl ?? row.sealedProduct?.imageUrl ?? null,
+  }));
+
+  const sales: TransactionListItem[] = transactions.map((row) => ({
+    id: row.id,
+    itemName: row.itemName,
+    condition: row.condition,
+    quantity: row.quantity,
+    costPerUnit: row.costPerUnit != null ? parseFloat(row.costPerUnit.toString()) : null,
+    salePricePerUnit: parseFloat(row.salePricePerUnit.toString()),
+    feesTotal: row.feesTotal != null ? parseFloat(row.feesTotal.toString()) : null,
+    shippingCost: row.shippingCost != null ? parseFloat(row.shippingCost.toString()) : null,
+    profit: row.profit != null ? parseFloat(row.profit.toString()) : null,
+    soldAt: row.soldAt.toISOString().slice(0, 10),
+    itemType: row.cardId ? "card" : "sealed",
+    itemId: row.cardId ?? row.sealedProductId ?? null,
+    imageUrl: row.card?.imageUrl ?? row.sealedProduct?.imageUrl ?? null,
+  }));
+
+  return { date, purchases, sales };
 }

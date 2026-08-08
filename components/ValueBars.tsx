@@ -68,9 +68,13 @@ function smoothPath(points: { x: number; y: number }[]): string {
 export function ValueBars({
   valuePoints,
   costBasisPoints,
+  animate = true,
 }: {
   valuePoints: PricePoint[];
   costBasisPoints: PricePoint[];
+  /** Gates the line-sweep entrance -- false renders the line pre-drawn-hidden
+      until the caller flips this once the chart has scrolled into view. */
+  animate?: boolean;
 }) {
   const gradientId = useId();
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -208,8 +212,13 @@ export function ValueBars({
             strokeWidth={2.5}
             strokeLinejoin="round"
             strokeLinecap="round"
-            className="sweep-in"
-            style={{ "--sweep-length": view.sweepLength } as React.CSSProperties}
+            className={animate ? "sweep-in" : undefined}
+            style={
+              {
+                "--sweep-length": view.sweepLength,
+                strokeDashoffset: animate ? undefined : view.sweepLength,
+              } as React.CSSProperties
+            }
             strokeDasharray={view.sweepLength}
           />
 

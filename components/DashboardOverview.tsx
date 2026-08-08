@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
 import { StatTile } from "@/components/StatTile";
 import { ValueBars } from "@/components/ValueBars";
 import { AllocationDonut } from "@/components/AllocationDonut";
@@ -40,8 +43,36 @@ export function DashboardOverview({
   allocationSlices: Slice[];
   timeline: TimelineData;
 }) {
+  // The charts' entrance animation (ValueBars' line sweep, AllocationDonut's
+  // ring stagger) should play once, when this slide actually scrolls into
+  // view -- not on mount, which happens instantly while the hero is still on
+  // screen and would be long over by the time the user scrolls down here.
+  // The observer disconnects after the first hit, so `animate` never resets
+  // and scrolling back up to the hero and down again does not replay it.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [animate, setAnimate] = useState(false);
+
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setAnimate(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.4 }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div className="mx-auto flex h-full max-w-6xl flex-col justify-center gap-4 px-4 py-6 sm:px-6 lg:gap-3">
+    <div
+      ref={rootRef}
+      className="mx-auto flex min-h-full max-w-6xl flex-col justify-center gap-4 px-4 py-6 sm:px-6 lg:gap-3"
+    >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
           label="What it's worth"
@@ -70,8 +101,8 @@ export function DashboardOverview({
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.6fr_1fr]">
-        <ValueBars valuePoints={valuePoints} costBasisPoints={costBasisPoints} />
-        <AllocationDonut slices={allocationSlices} total={totalValue} />
+        <ValueBars valuePoints={valuePoints} costBasisPoints={costBasisPoints} animate={animate} />
+        <AllocationDonut slices={allocationSlices} total={totalValue} animate={animate} />
       </div>
 
       <CollectionTimeline timeline={timeline} compact />
