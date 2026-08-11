@@ -40,13 +40,21 @@ export function SearchBar({
   const abortRef = useRef<AbortController | null>(null);
   const isFirstRender = useRef(true);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // Tracks the last query *this* input pushed to the URL, so the sync effect
+  // below can tell "the URL changed because I navigated" (don't touch value,
+  // the user may have kept typing since) apart from "the URL changed some
+  // other way" -- a Did You Mean link, browser back/forward -- which should
+  // pull the input's text into sync with the new query.
+  const lastPushedQueryRef = useRef(initialQuery);
 
   const dropdownOpen = focused && suggestions.length > 0;
 
   function navigate(query: string) {
+    const trimmed = query.trim();
+    lastPushedQueryRef.current = trimmed;
     const params = new URLSearchParams(searchParams.toString());
-    if (query.trim()) {
-      params.set("q", query.trim());
+    if (trimmed) {
+      params.set("q", trimmed);
     } else {
       params.delete("q");
     }
@@ -79,6 +87,12 @@ export function SearchBar({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
+
+  useEffect(() => {
+    if (initialQuery === lastPushedQueryRef.current) return;
+    lastPushedQueryRef.current = initialQuery;
+    setValue(initialQuery);
+  }, [initialQuery]);
 
   useEffect(() => {
     if (suggestDebounceRef.current) clearTimeout(suggestDebounceRef.current);
