@@ -23,6 +23,7 @@
     "backfill:pricecharting:details": "tsx scripts/backfill-pricecharting-details.ts",
     "backfill:set-branding": "tsx scripts/backfill-set-branding.ts",
     "snapshot:prices": "tsx scripts/snapshot-prices.ts",
+    "refresh:card-prices": "tsx scripts/refresh-card-latest-price.ts",
     "report:counts": "tsx scripts/report-counts.ts",
     "audit:data": "tsx scripts/audit-data.ts",
     "audit:http": "tsx scripts/audit-http.ts",

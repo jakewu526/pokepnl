@@ -108,14 +108,26 @@ async function searchCardsSorted(
   sort: Exclude<CardSort, "default">
 ): Promise<CardSearchResult> {
   const whereSql = buildCardSearchSql(query);
-  const orderSql =
-    sort === "age-asc"
+  const isAgeSort = sort === "age-asc" || sort === "age-desc";
+
+  // Age needs only Card + CardSet (releaseDate), so skip the price join
+  // entirely -- joining CardLatestPrice (or worse, the raw per-source
+  // LATERAL cascade) for every matching card just to sort by date it
+  // doesn't use was the main cost of this query.
+  const orderSql = isAgeSort
+    ? sort === "age-asc"
       ? Prisma.sql`s."releaseDate" ASC NULLS LAST, c.name ASC, c.number ASC`
-      : sort === "age-desc"
-        ? Prisma.sql`s."releaseDate" DESC NULLS LAST, c.name ASC, c.number ASC`
-        : sort === "price-asc"
-          ? Prisma.sql`COALESCE(pc.price, tcg.price, cm.price) ASC NULLS LAST, c.name ASC, c.number ASC`
-          : Prisma.sql`COALESCE(pc.price, tcg.price, cm.price) DESC NULLS LAST, c.name ASC, c.number ASC`;
+      : Prisma.sql`s."releaseDate" DESC NULLS LAST, c.name ASC, c.number ASC`
+    : sort === "price-asc"
+      ? Prisma.sql`clp.price ASC NULLS LAST, c.name ASC, c.number ASC`
+      : Prisma.sql`clp.price DESC NULLS LAST, c.name ASC, c.number ASC`;
+
+  const priceJoinSql = isAgeSort
+    ? Prisma.empty
+    : Prisma.sql`LEFT JOIN "CardLatestPrice" clp ON clp."cardId" = c.id`;
+  const priceSelectSql = isAgeSort
+    ? Prisma.sql`NULL::text AS price, NULL::text AS "priceSource"`
+    : Prisma.sql`clp.price::text AS price, clp.source::text AS "priceSource"`;
 
   const [countRows, rows] = await Promise.all([
     prisma.$queryRaw<{ count: bigint }[]>`
@@ -127,31 +139,10 @@ async function searchCardsSorted(
     prisma.$queryRaw<SortedCardRow[]>`
       SELECT c.id, c.name, c.number, c.rarity, c."imageUrl",
              s.name AS "setName", s."totalCards" AS "setTotal",
-             COALESCE(pc.price, tcg.price, cm.price)::text AS price,
-             CASE
-               WHEN pc.price IS NOT NULL THEN 'PRICECHARTING'
-               WHEN tcg.price IS NOT NULL THEN 'TCGPLAYER'
-               WHEN cm.price IS NOT NULL THEN 'CARDMARKET'
-               ELSE NULL
-             END AS "priceSource"
+             ${priceSelectSql}
       FROM "Card" c
       JOIN "CardSet" s ON s.id = c."setId"
-      LEFT JOIN LATERAL (
-        SELECT price FROM "PriceSnapshot"
-        WHERE "cardId" = c.id AND "priceType" = 'MARKET' AND variant = 'NORMAL' AND source = 'PRICECHARTING'
-          AND condition IS NULL
-        ORDER BY "capturedDate" DESC LIMIT 1
-      ) pc ON true
-      LEFT JOIN LATERAL (
-        SELECT price FROM "PriceSnapshot"
-        WHERE "cardId" = c.id AND "priceType" = 'MARKET' AND variant = 'NORMAL' AND source = 'TCGPLAYER'
-        ORDER BY "capturedDate" DESC LIMIT 1
-      ) tcg ON true
-      LEFT JOIN LATERAL (
-        SELECT price FROM "PriceSnapshot"
-        WHERE "cardId" = c.id AND "priceType" = 'MARKET' AND variant = 'NORMAL' AND source = 'CARDMARKET'
-        ORDER BY "capturedDate" DESC LIMIT 1
-      ) cm ON true
+      ${priceJoinSql}
       WHERE ${whereSql}
       ORDER BY ${orderSql}
       LIMIT ${CARDS_PAGE_SIZE} OFFSET ${(page - 1) * CARDS_PAGE_SIZE}
@@ -159,22 +150,29 @@ async function searchCardsSorted(
   ]);
 
   const total = Number(countRows[0]?.count ?? 0);
+  // Age-sorted rows didn't fetch price above -- look it up for just this
+  // page (30 cards), the same cheap batched call the default/name-sorted
+  // path already uses.
+  const prices = isAgeSort ? await getLatestPrices(rows.map((r) => r.id)) : null;
 
   return {
     total,
     page,
     pageCount: Math.max(1, Math.ceil(total / CARDS_PAGE_SIZE)),
-    cards: rows.map((c) => ({
-      id: c.id,
-      name: c.name,
-      number: c.number,
-      rarity: c.rarity,
-      imageUrl: c.imageUrl,
-      setName: c.setName,
-      setTotal: c.setTotal,
-      price: c.price != null ? parseFloat(c.price) : null,
-      priceSource: c.priceSource,
-    })),
+    cards: rows.map((c) => {
+      const priceInfo = prices?.get(c.id);
+      return {
+        id: c.id,
+        name: c.name,
+        number: c.number,
+        rarity: c.rarity,
+        imageUrl: c.imageUrl,
+        setName: c.setName,
+        setTotal: c.setTotal,
+        price: priceInfo ? priceInfo.price : c.price != null ? parseFloat(c.price) : null,
+        priceSource: priceInfo ? priceInfo.source : c.priceSource,
+      };
+    }),
   };
 }
 

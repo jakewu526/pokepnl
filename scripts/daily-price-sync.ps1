@@ -37,6 +37,9 @@ if ($ok) { $ok = Run-Step "Running ingest:cards:pricecharting" { npm run ingest:
 # while PriceCharting keeps advancing, and the two sources drift apart.
 if ($ok) { $ok = Run-Step "Running ingest:sealed:tcgcsv" { npm run ingest:sealed:tcgcsv } }
 if ($ok) { $ok = Run-Step "Running ingest:sealed:pricecharting" { npm run ingest:sealed:pricecharting } }
+# Keeps CardLatestPrice (the catalog's price-sort lookup table) in step with
+# the PriceSnapshot rows the ingest steps above just wrote.
+if ($ok) { $ok = Run-Step "Running refresh:card-prices" { npm run refresh:card-prices } }
 
 if ($ok) {
     Log "=== daily price sync completed successfully ==="

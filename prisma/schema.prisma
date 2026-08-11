@@ -44,9 +44,27 @@ model Card {
   collectionItems CollectionItem[]
   transactions    Transaction[]
   watchlistItems  WatchlistItem[]
+  latestPrice     CardLatestPrice?
 
   @@index([setId, number])
   @@index([name])
+}
+
+// One row per card, refreshed daily by `npm run refresh:card-prices` (see
+// scripts/daily-price-sync.ps1) right after price ingestion. Mirrors the
+// PRICECHARTING > TCGPLAYER > CARDMARKET cascade in getLatestPrices, but
+// precomputed so sorting the full catalog by price doesn't have to run that
+// cascade's 3 LATERAL index probes per card on every request -- across the
+// ~44k-card catalog that took ~5s; this join is a single indexed lookup.
+model CardLatestPrice {
+  cardId    String       @id
+  price     Decimal      @db.Decimal(10, 2)
+  source    PriceSource
+  updatedAt DateTime     @updatedAt
+
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([price])
 }
 
 model User {
