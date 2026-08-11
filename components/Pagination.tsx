@@ -1,9 +1,11 @@
 import Link from "next/link";
+import type { CardSort } from "@/lib/cards";
 
-function buildHref(query: string, page: number, view?: "sets"): string {
+function buildHref(query: string, page: number, view?: "sets", sort?: CardSort): string {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
   if (view) params.set("view", view);
+  if (sort && sort !== "default") params.set("sort", sort);
   if (page > 1) params.set("page", String(page));
   const qs = params.toString();
   return qs ? `/?${qs}` : "/";
@@ -14,11 +16,13 @@ export function Pagination({
   page,
   pageCount,
   view,
+  sort,
 }: {
   query: string;
   page: number;
   pageCount: number;
   view?: "sets";
+  sort?: CardSort;
 }) {
   const hasPrev = page > 1;
   const hasNext = page < pageCount;
@@ -30,7 +34,7 @@ export function Pagination({
     >
       {hasPrev ? (
         <Link
-          href={buildHref(query, page - 1, view)}
+          href={buildHref(query, page - 1, view, sort)}
           className="flex h-11 items-center rounded-full border border-line px-4 font-body text-sm font-medium text-ink hover:border-emerald hover:text-emerald-strong"
         >
           ← Previous
@@ -47,7 +51,7 @@ export function Pagination({
 
       {hasNext ? (
         <Link
-          href={buildHref(query, page + 1, view)}
+          href={buildHref(query, page + 1, view, sort)}
           className="flex h-11 items-center rounded-full border border-line px-4 font-body text-sm font-medium text-ink hover:border-emerald hover:text-emerald-strong"
         >
           Next →

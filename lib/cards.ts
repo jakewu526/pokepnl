@@ -1,7 +1,10 @@
+import { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { densifyHistory } from "@/lib/densify";
 
 export const CARDS_PAGE_SIZE = 30;
+
+export type CardSort = "default" | "age-asc" | "age-desc" | "price-asc" | "price-desc";
 
 export type CardListItem = {
   id: string;
@@ -63,7 +66,125 @@ function buildCardSearchWhere(query: string) {
   };
 }
 
-export async function searchCards(query: string, page: number): Promise<CardSearchResult> {
+// Same per-token AND-of-ORs semantics as buildCardSearchWhere, but as raw SQL
+// so age/price sorts can join price + release date and paginate in the
+// database instead of pulling the whole catalog into Node to sort.
+function buildCardSearchSql(query: string): Prisma.Sql {
+  const tokens = query.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return Prisma.sql`TRUE`;
+
+  const clauses = tokens.map((token) => {
+    const like = `%${token}%`;
+    const variants = subtypeVariants(token);
+    return Prisma.sql`(
+      c.name ILIKE ${like} OR
+      c.number ILIKE ${like} OR
+      c.rarity ILIKE ${like} OR
+      c.supertype ILIKE ${like} OR
+      c.subtypes && ${variants}::text[] OR
+      s.name ILIKE ${like} OR
+      s.series ILIKE ${like}
+    )`;
+  });
+
+  return Prisma.join(clauses, " AND ");
+}
+
+type SortedCardRow = {
+  id: string;
+  name: string;
+  number: string;
+  rarity: string | null;
+  imageUrl: string | null;
+  setName: string;
+  setTotal: number | null;
+  price: string | null;
+  priceSource: "PRICECHARTING" | "TCGPLAYER" | "CARDMARKET" | null;
+};
+
+async function searchCardsSorted(
+  query: string,
+  page: number,
+  sort: Exclude<CardSort, "default">
+): Promise<CardSearchResult> {
+  const whereSql = buildCardSearchSql(query);
+  const orderSql =
+    sort === "age-asc"
+      ? Prisma.sql`s."releaseDate" ASC NULLS LAST, c.name ASC, c.number ASC`
+      : sort === "age-desc"
+        ? Prisma.sql`s."releaseDate" DESC NULLS LAST, c.name ASC, c.number ASC`
+        : sort === "price-asc"
+          ? Prisma.sql`COALESCE(pc.price, tcg.price, cm.price) ASC NULLS LAST, c.name ASC, c.number ASC`
+          : Prisma.sql`COALESCE(pc.price, tcg.price, cm.price) DESC NULLS LAST, c.name ASC, c.number ASC`;
+
+  const [countRows, rows] = await Promise.all([
+    prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint AS count
+      FROM "Card" c
+      JOIN "CardSet" s ON s.id = c."setId"
+      WHERE ${whereSql}
+    `,
+    prisma.$queryRaw<SortedCardRow[]>`
+      SELECT c.id, c.name, c.number, c.rarity, c."imageUrl",
+             s.name AS "setName", s."totalCards" AS "setTotal",
+             COALESCE(pc.price, tcg.price, cm.price)::text AS price,
+             CASE
+               WHEN pc.price IS NOT NULL THEN 'PRICECHARTING'
+               WHEN tcg.price IS NOT NULL THEN 'TCGPLAYER'
+               WHEN cm.price IS NOT NULL THEN 'CARDMARKET'
+               ELSE NULL
+             END AS "priceSource"
+      FROM "Card" c
+      JOIN "CardSet" s ON s.id = c."setId"
+      LEFT JOIN LATERAL (
+        SELECT price FROM "PriceSnapshot"
+        WHERE "cardId" = c.id AND "priceType" = 'MARKET' AND variant = 'NORMAL' AND source = 'PRICECHARTING'
+          AND condition IS NULL
+        ORDER BY "capturedDate" DESC LIMIT 1
+      ) pc ON true
+      LEFT JOIN LATERAL (
+        SELECT price FROM "PriceSnapshot"
+        WHERE "cardId" = c.id AND "priceType" = 'MARKET' AND variant = 'NORMAL' AND source = 'TCGPLAYER'
+        ORDER BY "capturedDate" DESC LIMIT 1
+      ) tcg ON true
+      LEFT JOIN LATERAL (
+        SELECT price FROM "PriceSnapshot"
+        WHERE "cardId" = c.id AND "priceType" = 'MARKET' AND variant = 'NORMAL' AND source = 'CARDMARKET'
+        ORDER BY "capturedDate" DESC LIMIT 1
+      ) cm ON true
+      WHERE ${whereSql}
+      ORDER BY ${orderSql}
+      LIMIT ${CARDS_PAGE_SIZE} OFFSET ${(page - 1) * CARDS_PAGE_SIZE}
+    `,
+  ]);
+
+  const total = Number(countRows[0]?.count ?? 0);
+
+  return {
+    total,
+    page,
+    pageCount: Math.max(1, Math.ceil(total / CARDS_PAGE_SIZE)),
+    cards: rows.map((c) => ({
+      id: c.id,
+      name: c.name,
+      number: c.number,
+      rarity: c.rarity,
+      imageUrl: c.imageUrl,
+      setName: c.setName,
+      setTotal: c.setTotal,
+      price: c.price != null ? parseFloat(c.price) : null,
+      priceSource: c.priceSource,
+    })),
+  };
+}
+
+export async function searchCards(
+  query: string,
+  page: number,
+  sort: CardSort = "default"
+): Promise<CardSearchResult> {
+  if (sort !== "default") return searchCardsSorted(query, page, sort);
+
   const where = buildCardSearchWhere(query);
 
   const [total, cards] = await Promise.all([

@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { CARDS_PAGE_SIZE, getCatalogStats, searchCards } from "@/lib/cards";
+import { CARDS_PAGE_SIZE, getCatalogStats, searchCards, type CardSort } from "@/lib/cards";
 import { getSetsByEra } from "@/lib/sets";
 import { getWatchlistedCardIds } from "@/lib/watchlist";
 import { getCurrentUser } from "@/lib/dal";
@@ -8,6 +8,7 @@ import { CardTile } from "@/components/CardTile";
 import { SetTile } from "@/components/SetTile";
 import { CatalogViewToggle, type CatalogView } from "@/components/CatalogViewToggle";
 import { Pagination } from "@/components/Pagination";
+import { SortDropdown } from "@/components/SortDropdown";
 import { AuthNav } from "@/components/AuthNav";
 import { CatalogNav } from "@/components/CatalogNav";
 import { ScrollRestoration } from "@/components/ScrollRestoration";
@@ -18,19 +19,23 @@ import { BinderBatchAddBar } from "@/components/BinderBatchAddBar";
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string; view?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; view?: string; sort?: string }>;
 }) {
   const params = await searchParams;
   const query = params.q ?? "";
   const page = Math.max(1, Number(params.page) || 1);
   const view: CatalogView = params.view === "sets" ? "sets" : "singles";
+  const VALID_SORTS: CardSort[] = ["default", "age-asc", "age-desc", "price-asc", "price-desc"];
+  const sort: CardSort = VALID_SORTS.includes(params.sort as CardSort)
+    ? (params.sort as CardSort)
+    : "default";
 
   const [{ cardCount, setCount }, user] = await Promise.all([
     getCatalogStats(),
     getCurrentUser(),
   ]);
 
-  const results = view === "singles" ? await searchCards(query, page) : null;
+  const results = view === "singles" ? await searchCards(query, page, sort) : null;
   const setResults = view === "sets" ? await getSetsByEra(query, user?.id ?? null, page) : null;
   const watchedIds = results
     ? await getWatchlistedCardIds(
@@ -99,7 +104,10 @@ export default async function Home({
                   {results.total.toLocaleString()} result{results.total === 1 ? "" : "s"}
                   {query && <> for “{query}”</>}
                 </p>
-                {user && <BinderSelectModeToggle />}
+                <div className="flex items-center gap-2">
+                  <SortDropdown sort={sort} />
+                  {user && <BinderSelectModeToggle />}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
                 {results.cards.map((card) => (
@@ -111,7 +119,7 @@ export default async function Home({
                 ))}
               </div>
               <div className="mt-8">
-                <Pagination query={query} page={results.page} pageCount={results.pageCount} />
+                <Pagination query={query} page={results.page} pageCount={results.pageCount} sort={sort} />
               </div>
               <BinderBatchAddBar />
             </BinderSelectionProvider>
