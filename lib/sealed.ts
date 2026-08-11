@@ -1,47 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import type { PricePoint } from "@/lib/cards";
 import { densifyHistory } from "@/lib/densify";
+import { SEALED_TYPE_LABELS, type SealedProductSuggestion, type SealedProductType } from "@/lib/sealed-types";
+
+export {
+  SEALED_TYPE_LABELS,
+  type SealedProductSuggestion,
+  type SealedProductType,
+} from "@/lib/sealed-types";
 
 export const SEALED_PAGE_SIZE = 30;
-
-export type SealedProductType =
-  | "BOOSTER_BOX"
-  | "BOOSTER_PACK"
-  | "ELITE_TRAINER_BOX"
-  | "BUNDLE"
-  | "BLISTER"
-  | "COLLECTION_BOX"
-  | "TIN"
-  | "OTHER"
-  | "PREMIUM_COLLECTION"
-  | "DISPLAY_CASE"
-  | "DECK"
-  | "POSTER_COLLECTION"
-  | "PIN_COLLECTION"
-  | "GIFT_BOX"
-  | "BINDER"
-  | "STARTER_SET";
-
-export const SEALED_TYPE_LABELS: Record<SealedProductType, string> = {
-  BOOSTER_BOX: "Booster Box",
-  BOOSTER_PACK: "Booster Pack",
-  ELITE_TRAINER_BOX: "Elite Trainer Box",
-  BUNDLE: "Booster Bundle",
-  BLISTER: "Blister",
-  COLLECTION_BOX: "Collection Box",
-  TIN: "Tin",
-  OTHER: "Sealed Product",
-  PREMIUM_COLLECTION: "Premium Collection",
-  // A retail case holding many of a smaller product -- kept distinct from TIN
-  // so a ~$315 case of ten mini tins doesn't read like a ~$31 single tin.
-  DISPLAY_CASE: "Display Case",
-  DECK: "Deck",
-  POSTER_COLLECTION: "Poster Collection",
-  PIN_COLLECTION: "Pin Collection",
-  GIFT_BOX: "Gift Box",
-  BINDER: "Binder",
-  STARTER_SET: "Starter Set",
-};
 
 // Ordered best-first. TCGplayer's market price is what sealed actually
 // changes hands at, so it outranks PriceCharting -- whose sealed "loose"
@@ -145,6 +113,77 @@ export async function searchSealedProducts(
       };
     }),
   };
+}
+
+type NameSimilarityRow = { name: string; sim: number };
+
+// Sealed-catalog counterpart to getCardNameSuggestion in lib/cards.ts --
+// same pg_trgm "did you mean" behavior, only invoked on a zero-result
+// search, never live while typing.
+export async function getSealedNameSuggestion(query: string): Promise<string | null> {
+  const trimmed = query.trim();
+  if (!trimmed) return null;
+
+  const rows = await prisma.$queryRaw<NameSimilarityRow[]>`
+    SELECT name, similarity(name, ${trimmed}) AS sim
+    FROM "SealedProduct"
+    WHERE name % ${trimmed}
+    ORDER BY sim DESC
+    LIMIT 1
+  `;
+  const best = rows[0];
+  if (!best || best.name.toLowerCase() === trimmed.toLowerCase()) return null;
+  return best.name;
+}
+
+export const SEALED_SUGGESTION_LIMIT = 8;
+
+// Mirrors getCardSuggestions: over-fetch on the same search-bar match as
+// searchSealedProducts, then re-rank so exact/prefix name matches surface
+// above looser set-name hits.
+export async function getSealedSuggestions(query: string): Promise<SealedProductSuggestion[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const candidates = await prisma.sealedProduct.findMany({
+    where: {
+      OR: [
+        { name: { contains: trimmed, mode: "insensitive" as const } },
+        { set: { name: { contains: trimmed, mode: "insensitive" as const } } },
+      ],
+    },
+    orderBy: [{ name: "asc" }],
+    take: SEALED_SUGGESTION_LIMIT * 4,
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      imageUrl: true,
+      language: true,
+      set: { select: { name: true } },
+    },
+  });
+
+  const lowerQuery = trimmed.toLowerCase();
+  const rank = (p: (typeof candidates)[number]) => {
+    const lowerName = p.name.toLowerCase();
+    if (lowerName === lowerQuery) return 0;
+    if (lowerName.startsWith(lowerQuery)) return 1;
+    return 2;
+  };
+
+  return candidates
+    .slice()
+    .sort((a, b) => rank(a) - rank(b))
+    .slice(0, SEALED_SUGGESTION_LIMIT)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      type: p.type as SealedProductType,
+      imageUrl: p.imageUrl,
+      language: p.language,
+      setName: p.set?.name ?? null,
+    }));
 }
 
 export type SealedProductDetail = {

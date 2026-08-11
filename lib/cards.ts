@@ -226,6 +226,29 @@ export async function searchCards(
   };
 }
 
+type NameSimilarityRow = { name: string; sim: number };
+
+// A YouTube-style "did you mean" for a zero-result search -- only called
+// when searchCards/searchSealedProducts already came back empty, never
+// live while typing. pg_trgm's `%` operator (threshold 0.3 by default)
+// finds the closest card name by trigram similarity; below that, or an
+// exact match to what was typed, there's nothing useful to suggest.
+export async function getCardNameSuggestion(query: string): Promise<string | null> {
+  const trimmed = query.trim();
+  if (!trimmed) return null;
+
+  const rows = await prisma.$queryRaw<NameSimilarityRow[]>`
+    SELECT name, similarity(name, ${trimmed}) AS sim
+    FROM "Card"
+    WHERE name % ${trimmed}
+    ORDER BY sim DESC
+    LIMIT 1
+  `;
+  const best = rows[0];
+  if (!best || best.name.toLowerCase() === trimmed.toLowerCase()) return null;
+  return best.name;
+}
+
 export type CardSuggestion = {
   id: string;
   name: string;

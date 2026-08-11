@@ -4,8 +4,15 @@ import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { CardSuggestion } from "@/lib/cards";
+import { SEALED_TYPE_LABELS, type SealedProductSuggestion } from "@/lib/sealed-types";
 
 const SUGGEST_DEBOUNCE_MS = 150;
+
+type Suggestion = CardSuggestion | SealedProductSuggestion;
+
+function isCardSuggestion(s: Suggestion): s is CardSuggestion {
+  return "number" in s;
+}
 
 function formatNumber(number: string, setTotal: number | null): string {
   if (!setTotal) return number;
@@ -13,13 +20,19 @@ function formatNumber(number: string, setTotal: number | null): string {
   return `${padded}/${setTotal}`;
 }
 
-export function SearchBar({ initialQuery }: { initialQuery: string }) {
+export function SearchBar({
+  initialQuery,
+  mode = "cards",
+}: {
+  initialQuery: string;
+  mode?: "cards" | "sealed";
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [value, setValue] = useState(initialQuery);
   const [isPending, startTransition] = useTransition();
-  const [suggestions, setSuggestions] = useState<CardSuggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -43,7 +56,7 @@ export function SearchBar({ initialQuery }: { initialQuery: string }) {
     });
   }
 
-  function selectSuggestion(card: CardSuggestion) {
+  function selectSuggestion(item: Suggestion) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (suggestDebounceRef.current) clearTimeout(suggestDebounceRef.current);
     abortRef.current?.abort();
@@ -51,7 +64,7 @@ export function SearchBar({ initialQuery }: { initialQuery: string }) {
     setActiveIndex(-1);
     setFocused(false);
     inputRef.current?.blur();
-    router.push(`/cards/${card.id}`);
+    router.push(isCardSuggestion(item) ? `/cards/${item.id}` : `/sealed/${item.id}`);
   }
 
   useEffect(() => {
@@ -79,9 +92,10 @@ export function SearchBar({ initialQuery }: { initialQuery: string }) {
       }
       const controller = new AbortController();
       abortRef.current = controller;
-      fetch(`/api/card-suggestions?q=${encodeURIComponent(trimmed)}`, { signal: controller.signal })
+      const endpoint = mode === "sealed" ? "/api/sealed-suggestions" : "/api/card-suggestions";
+      fetch(`${endpoint}?q=${encodeURIComponent(trimmed)}`, { signal: controller.signal })
         .then((res) => (res.ok ? res.json() : { suggestions: [] }))
-        .then((data: { suggestions?: CardSuggestion[] }) => {
+        .then((data: { suggestions?: Suggestion[] }) => {
           setSuggestions(data.suggestions ?? []);
           setActiveIndex(-1);
         })
@@ -93,7 +107,8 @@ export function SearchBar({ initialQuery }: { initialQuery: string }) {
     return () => {
       if (suggestDebounceRef.current) clearTimeout(suggestDebounceRef.current);
     };
-  }, [value]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, mode]);
 
   const activeId =
     activeIndex >= 0 && activeIndex < suggestions.length
@@ -114,7 +129,7 @@ export function SearchBar({ initialQuery }: { initialQuery: string }) {
       }}
     >
       <label htmlFor="card-search" className="sr-only">
-        Search cards by name, number, set, or type
+        {mode === "sealed" ? "Search sealed products by name or set" : "Search cards by name, number, set, or type"}
       </label>
       <svg
         aria-hidden="true"
@@ -131,7 +146,7 @@ export function SearchBar({ initialQuery }: { initialQuery: string }) {
         type="search"
         inputMode="search"
         autoComplete="off"
-        placeholder="Search by name, number, set, or type…"
+        placeholder={mode === "sealed" ? "Search by name or set…" : "Search by name, number, set, or type…"}
         value={value}
         onChange={(e) => {
           setValue(e.target.value);
@@ -175,29 +190,37 @@ export function SearchBar({ initialQuery }: { initialQuery: string }) {
           role="listbox"
           className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 max-h-96 overflow-y-auto rounded-2xl border border-line bg-paper-raised py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
         >
-          {suggestions.map((card, index) => (
-            <li key={card.id} role="option" id={`card-suggestion-${card.id}`} aria-selected={index === activeIndex}>
+          {suggestions.map((item, index) => (
+            <li key={item.id} role="option" id={`card-suggestion-${item.id}`} aria-selected={index === activeIndex}>
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => selectSuggestion(card)}
+                onClick={() => selectSuggestion(item)}
                 onMouseEnter={() => setActiveIndex(index)}
                 className={`flex w-full items-center gap-3 px-3 py-2 text-left transition-colors ${
                   index === activeIndex ? "bg-emerald/10" : "hover:bg-emerald/5"
                 }`}
               >
                 <div className="relative h-10 w-[29px] shrink-0 overflow-hidden rounded-[4px] bg-line/40">
-                  {card.imageUrl && (
-                    <Image src={card.imageUrl} alt="" fill sizes="29px" className="object-contain" />
+                  {item.imageUrl && (
+                    <Image src={item.imageUrl} alt="" fill sizes="29px" className="object-contain" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-body text-[14px] font-medium text-ink">{card.name}</p>
-                  <p className="truncate font-body text-[12px] text-ink-muted">
-                    {card.setName} ·{" "}
-                    <span className="font-data">{formatNumber(card.number, card.setTotal)}</span>
-                    {card.rarity && <> · {card.rarity}</>}
-                  </p>
+                  <p className="truncate font-body text-[14px] font-medium text-ink">{item.name}</p>
+                  {isCardSuggestion(item) ? (
+                    <p className="truncate font-body text-[12px] text-ink-muted">
+                      {item.setName} ·{" "}
+                      <span className="font-data">{formatNumber(item.number, item.setTotal)}</span>
+                      {item.rarity && <> · {item.rarity}</>}
+                    </p>
+                  ) : (
+                    <p className="truncate font-body text-[12px] text-ink-muted">
+                      {item.setName && <>{item.setName} · </>}
+                      {SEALED_TYPE_LABELS[item.type]}
+                      {item.language !== "EN" && <> · {item.language}</>}
+                    </p>
+                  )}
                 </div>
               </button>
             </li>

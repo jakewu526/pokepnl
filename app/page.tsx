@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { CARDS_PAGE_SIZE, getCatalogStats, searchCards, type CardSort } from "@/lib/cards";
+import { CARDS_PAGE_SIZE, getCardNameSuggestion, getCatalogStats, searchCards, type CardSort } from "@/lib/cards";
 import { getSetsByEra } from "@/lib/sets";
 import { getWatchlistedCardIds } from "@/lib/watchlist";
 import { getCurrentUser } from "@/lib/dal";
@@ -8,6 +8,7 @@ import { CardTile } from "@/components/CardTile";
 import { SetTile } from "@/components/SetTile";
 import { CatalogViewToggle, type CatalogView } from "@/components/CatalogViewToggle";
 import { Pagination } from "@/components/Pagination";
+import { DidYouMean } from "@/components/DidYouMean";
 import { SortDropdown } from "@/components/SortDropdown";
 import { AuthNav } from "@/components/AuthNav";
 import { CatalogNav } from "@/components/CatalogNav";
@@ -43,6 +44,8 @@ export default async function Home({
         results.cards.map((c) => c.id)
       )
     : null;
+  const didYouMean =
+    results && results.total === 0 && query ? await getCardNameSuggestion(query) : null;
 
   return (
     <div className="flex min-h-full flex-col">
@@ -93,9 +96,20 @@ export default async function Home({
               <p className="font-body text-lg font-medium text-ink">
                 {query ? `No cards found for “${query}”` : "No cards found"}
               </p>
-              <p className="font-body text-sm text-ink-muted">
-                Try a different spelling, or a shorter search term.
-              </p>
+              {didYouMean ? (
+                <DidYouMean
+                  href={`/?${new URLSearchParams({
+                    q: didYouMean,
+                    ...(params.view ? { view: params.view } : {}),
+                    ...(params.sort ? { sort: params.sort } : {}),
+                  }).toString()}`}
+                  suggestion={didYouMean}
+                />
+              ) : (
+                <p className="font-body text-sm text-ink-muted">
+                  Try a different spelling, or a shorter search term.
+                </p>
+              )}
             </div>
           ) : (
             <BinderSelectionProvider>

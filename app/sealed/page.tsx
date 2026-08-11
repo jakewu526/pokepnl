@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { SEALED_PAGE_SIZE, getSealedCatalogStats, searchSealedProducts } from "@/lib/sealed";
+import { SEALED_PAGE_SIZE, getSealedCatalogStats, getSealedNameSuggestion, searchSealedProducts } from "@/lib/sealed";
 import { getWatchlistedSealedIds } from "@/lib/watchlist";
 import { getCurrentUser } from "@/lib/dal";
 import { SearchBar } from "@/components/SearchBar";
@@ -8,6 +8,7 @@ import { SealedPagination } from "@/components/SealedPagination";
 import { AuthNav } from "@/components/AuthNav";
 import { CatalogNav } from "@/components/CatalogNav";
 import { SealedFilterBar } from "@/components/SealedFilterBar";
+import { DidYouMean } from "@/components/DidYouMean";
 
 export default async function SealedPage({
   searchParams,
@@ -29,6 +30,8 @@ export default async function SealedPage({
     user?.id ?? null,
     results.products.map((p) => p.id)
   );
+  const didYouMean =
+    results.total === 0 && query ? await getSealedNameSuggestion(query) : null;
 
   return (
     <div className="flex min-h-full flex-col">
@@ -57,7 +60,7 @@ export default async function SealedPage({
           <CatalogNav active="sealed" />
 
           <Suspense fallback={<div className="h-12 rounded-full border border-line bg-paper-raised" />}>
-            <SearchBar initialQuery={query} />
+            <SearchBar initialQuery={query} mode="sealed" />
           </Suspense>
 
           <SealedFilterBar query={query} type={type} language={language} />
@@ -70,9 +73,20 @@ export default async function SealedPage({
             <p className="font-body text-lg font-medium text-ink">
               {query ? `No sealed products found for “${query}”` : "No sealed products found"}
             </p>
-            <p className="font-body text-sm text-ink-muted">
-              Try a different spelling, or a shorter search term.
-            </p>
+            {didYouMean ? (
+              <DidYouMean
+                href={`/sealed?${new URLSearchParams({
+                  q: didYouMean,
+                  ...(type ? { type } : {}),
+                  ...(language ? { lang: language } : {}),
+                }).toString()}`}
+                suggestion={didYouMean}
+              />
+            ) : (
+              <p className="font-body text-sm text-ink-muted">
+                Try a different spelling, or a shorter search term.
+              </p>
+            )}
           </div>
         ) : (
           <>
