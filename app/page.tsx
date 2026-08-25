@@ -9,13 +9,21 @@ import { SetTile } from "@/components/SetTile";
 import { CatalogViewToggle, type CatalogView } from "@/components/CatalogViewToggle";
 import { Pagination } from "@/components/Pagination";
 import { DidYouMean } from "@/components/DidYouMean";
-import { SortDropdown } from "@/components/SortDropdown";
+import { SortDropdown, type SortOption } from "@/components/SortDropdown";
 import { AuthNav } from "@/components/AuthNav";
 import { CatalogNav } from "@/components/CatalogNav";
 import { ScrollRestoration } from "@/components/ScrollRestoration";
 import { BinderSelectionProvider } from "@/components/BinderSelection";
 import { BinderSelectModeToggle } from "@/components/BinderSelectModeToggle";
 import { BinderBatchAddBar } from "@/components/BinderBatchAddBar";
+
+const CARD_SORT_OPTIONS: SortOption<CardSort>[] = [
+  { key: "default", label: "Alphabetical" },
+  { key: "age-desc", label: "Age: Newest first" },
+  { key: "age-asc", label: "Age: Oldest first" },
+  { key: "price-asc", label: "Price: Low to high" },
+  { key: "price-desc", label: "Price: High to low" },
+];
 
 export default async function Home({
   searchParams,
@@ -119,7 +127,7 @@ export default async function Home({
                   {query && <> for “{query}”</>}
                 </p>
                 <div className="flex items-center gap-2">
-                  <SortDropdown sort={sort} />
+                  <SortDropdown sort={sort} options={CARD_SORT_OPTIONS} />
                   {user && <BinderSelectModeToggle />}
                 </div>
               </div>

@@ -192,7 +192,23 @@ type SetCardRow = {
   setTotal: number | null;
 };
 
-export async function getCardsInSet(setId: string): Promise<CardListItem[]> {
+export type SetCardSort = "number" | "price-asc" | "price-desc";
+
+// Every card in a set shares the same release date, so an "age" sort
+// (meaningful across the full multi-set catalog in lib/cards.ts) would be a
+// no-op here -- there's nothing to distinguish cards by. Only price sorting
+// applies within a single set.
+function comparePrices(a: number | null, b: number | null, direction: "asc" | "desc"): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  return direction === "asc" ? a - b : b - a;
+}
+
+export async function getCardsInSet(
+  setId: string,
+  sort: SetCardSort = "number"
+): Promise<CardListItem[]> {
   // "number" is a string (e.g. "1", "10a", "SWSH134"), so a plain text sort
   // puts "10" before "2". Sort by any leading letters first (groups plain
   // numbered cards ahead of prefixed promo/secret-rare numbering), then by
@@ -212,7 +228,7 @@ export async function getCardsInSet(setId: string): Promise<CardListItem[]> {
 
   const prices = await getLatestPrices(cards.map((c) => c.id));
 
-  return cards.map((c) => {
+  const list = cards.map((c) => {
     const priceInfo = prices.get(c.id);
     return {
       id: c.id,
@@ -226,4 +242,11 @@ export async function getCardsInSet(setId: string): Promise<CardListItem[]> {
       priceSource: priceInfo?.source ?? null,
     };
   });
+
+  if (sort === "price-asc" || sort === "price-desc") {
+    const direction = sort === "price-asc" ? "asc" : "desc";
+    list.sort((a, b) => comparePrices(a.price, b.price, direction));
+  }
+
+  return list;
 }

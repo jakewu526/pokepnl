@@ -2,11 +2,12 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { BackLink } from "@/components/BackLink";
 import { Suspense } from "react";
-import { getSetDetail, getCardsInSet } from "@/lib/sets";
+import { getSetDetail, getCardsInSet, type SetCardSort } from "@/lib/sets";
 import { getWatchlistedCardIds } from "@/lib/watchlist";
 import { getCurrentUser } from "@/lib/dal";
 import { CardTile } from "@/components/CardTile";
 import { AuthNav } from "@/components/AuthNav";
+import { SortDropdown, type SortOption } from "@/components/SortDropdown";
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -14,16 +15,30 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
+const SET_CARD_SORT_OPTIONS: SortOption<SetCardSort>[] = [
+  { key: "number", label: "Card #" },
+  { key: "price-asc", label: "Price: Low to high" },
+  { key: "price-desc", label: "Price: High to low" },
+];
+const VALID_SET_SORTS: SetCardSort[] = ["number", "price-asc", "price-desc"];
+
 export default async function SetDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ sort?: string }>;
 }) {
   const { id } = await params;
+  const { sort: sortParam } = await searchParams;
+  const sort: SetCardSort = VALID_SET_SORTS.includes(sortParam as SetCardSort)
+    ? (sortParam as SetCardSort)
+    : "number";
+
   const set = await getSetDetail(id);
   if (!set) notFound();
 
-  const [cards, user] = await Promise.all([getCardsInSet(id), getCurrentUser()]);
+  const [cards, user] = await Promise.all([getCardsInSet(id, sort), getCurrentUser()]);
   const watchedIds = user ? await getWatchlistedCardIds(user.id, cards.map((c) => c.id)) : new Set<string>();
 
   return (
@@ -67,11 +82,16 @@ export default async function SetDetailPage({
             <p className="font-body text-lg font-medium text-ink">No cards ingested for this set yet</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
-            {cards.map((card) => (
-              <CardTile key={card.id} card={card} watched={user ? watchedIds.has(card.id) : undefined} />
-            ))}
-          </div>
+          <>
+            <div className="mb-4 flex items-center justify-end">
+              <SortDropdown sort={sort} options={SET_CARD_SORT_OPTIONS} defaultKey="number" />
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
+              {cards.map((card) => (
+                <CardTile key={card.id} card={card} watched={user ? watchedIds.has(card.id) : undefined} />
+              ))}
+            </div>
+          </>
         )}
       </main>
 

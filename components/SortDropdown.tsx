@@ -2,22 +2,25 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import type { CardSort } from "@/lib/cards";
 
-const OPTIONS: { key: CardSort; label: string }[] = [
-  { key: "default", label: "Alphabetical" },
-  { key: "age-desc", label: "Age: Newest first" },
-  { key: "age-asc", label: "Age: Oldest first" },
-  { key: "price-asc", label: "Price: Low to high" },
-  { key: "price-desc", label: "Price: High to low" },
-];
+export type SortOption<T extends string> = { key: T; label: string };
 
-export function SortDropdown({ sort }: { sort: CardSort }) {
+export function SortDropdown<T extends string>({
+  sort,
+  options,
+  defaultKey,
+}: {
+  sort: T;
+  options: SortOption<T>[];
+  // The sort key that means "no ?sort= in the URL" -- defaults to options[0].
+  defaultKey?: T;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const resolvedDefaultKey = defaultKey ?? options[0]?.key;
 
   useEffect(() => {
     if (!open) return;
@@ -35,11 +38,11 @@ export function SortDropdown({ sort }: { sort: CardSort }) {
     };
   }, [open]);
 
-  function select(next: CardSort) {
+  function select(next: T) {
     setOpen(false);
     if (next === sort) return;
     const params = new URLSearchParams(searchParams.toString());
-    if (next === "default") {
+    if (next === resolvedDefaultKey) {
       params.delete("sort");
     } else {
       params.set("sort", next);
@@ -48,7 +51,7 @@ export function SortDropdown({ sort }: { sort: CardSort }) {
     router.push(params.size > 0 ? `${pathname}?${params.toString()}` : pathname);
   }
 
-  const activeLabel = OPTIONS.find((o) => o.key === sort)?.label ?? "Default";
+  const activeLabel = options.find((o) => o.key === sort)?.label ?? options[0]?.label;
 
   return (
     <div ref={ref} className="relative">
@@ -76,7 +79,7 @@ export function SortDropdown({ sort }: { sort: CardSort }) {
           role="menu"
           className="absolute right-0 top-full z-20 mt-2 w-48 overflow-hidden rounded-card border border-line bg-paper-raised shadow-[0_4px_16px_rgba(0,0,0,0.08)]"
         >
-          {OPTIONS.map((option) => (
+          {options.map((option) => (
             <button
               key={option.key}
               type="button"
