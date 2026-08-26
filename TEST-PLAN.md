@@ -147,7 +147,7 @@ Keep these three states available. Several bugs only appear in one of them.
 ### Authorization / IDOR — **S1 if any fail**
 | ID | Case | Expected |
 |---|---|---|
-| AUTH-60 | User A calls `removeFromCollection` with User B's `collectionItemId` | no-op, B's data untouched |
+| AUTH-60 | User A calls `deletePosition` with User B's `collectionItemId` | no-op, B's data untouched |
 | AUTH-61 | User A calls `sellCollectionItem` with B's item id | no-op |
 | AUTH-62 | User A calls `setFeaturedWatchlistCard` with B's watchlist item id | rejected |
 | AUTH-63 | Any server action invoked with no session | throws/redirects, never writes |
@@ -431,8 +431,8 @@ under different names, so identity bugs are the main regression risk here.
 | PNL-11 | Realized-profit-over-time chart is **cumulative** | running total, not per-day |
 | PNL-12 | Two sales on the same day | aggregated into one point |
 | PNL-13 | Transaction table: date, thumbnail, item, qty, cost, sold for, fees, net profit | all correct, newest first |
-| PNL-14 | Deleting the collection item after a sale | historic transaction remains |
-| PNL-15 | Remove (not sell) an item | decrements by 1 / deletes at qty 1; **no** transaction created |
+| PNL-14 | Deleting a position that has prior sales | prompts for confirmation; confirming removes the CollectionItem *and* every PurchaseLot/Transaction for that position -- no orphaned history left behind |
+| PNL-15 | Click "Delete" on a position, then "Cancel" on the confirmation | nothing removed |
 | PNL-16 | Sell price field validation (blank, letters, huge) | handled, no NaN in the table |
 | PNL-17 | Dashboard on a fresh (0-item) account | empty state shown, no KPI tiles/charts rendered |
 | PNL-18 | Sold item's name persists even if the card is later removed from the catalog | `itemName` snapshot used |

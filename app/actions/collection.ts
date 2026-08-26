@@ -22,6 +22,16 @@ function mergeCost(
 
 type PositionKey = { cardId: string | null; sealedProductId: string | null; condition: string | null };
 
+// Parses a "YYYY-MM-DD" <input type="date"> value into a Date. Anchored to
+// UTC midnight (not local midnight) so it round-trips exactly through the
+// row's own `.toISOString().slice(0, 10)` display format regardless of the
+// server's timezone.
+function parseDateInput(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 // Positions are built from transactions, not maintained as independent state:
 // this replays every PurchaseLot (via the same mergeCost weighted-average math
 // used at write time) and nets out every Transaction for the same
@@ -139,35 +149,6 @@ export async function addSealedToCollection(
   revalidatePath(`/sealed/${sealedProductId}`);
 }
 
-export async function updateCollectionItem(
-  collectionItemId: string,
-  updates: { quantity?: number; costPerUnit?: number | null; condition?: string }
-): Promise<void> {
-  const session = await verifySession();
-
-  const data: { quantity?: number; costPerUnit?: number | null; condition?: string } = {};
-  if (updates.quantity != null) {
-    if (!Number.isFinite(updates.quantity) || updates.quantity < 1) return;
-    data.quantity = Math.floor(updates.quantity);
-  }
-  if ("costPerUnit" in updates) {
-    if (updates.costPerUnit != null && (!Number.isFinite(updates.costPerUnit) || updates.costPerUnit < 0)) return;
-    data.costPerUnit = updates.costPerUnit;
-  }
-  if (updates.condition != null) {
-    data.condition = updates.condition;
-  }
-  if (Object.keys(data).length === 0) return;
-
-  await prisma.collectionItem.updateMany({
-    where: { id: collectionItemId, userId: session.userId },
-    data,
-  });
-
-  revalidatePath("/dashboard");
-  revalidatePath("/portfolio");
-}
-
 // Drill-down for the portfolio table's "History" button -- every buy/sell
 // event that built up (or drew down) this position, keyed off the position's
 // current cardId/sealedProductId/condition. See lib/pnl.ts's getPositionLedger
@@ -194,7 +175,7 @@ export async function getPositionLedgerAction(collectionItemId: string): Promise
 // own recorded sales.
 export async function updatePurchaseLot(
   lotId: string,
-  updates: { quantity?: number; costPerUnit?: number | null }
+  updates: { quantity?: number; costPerUnit?: number | null; purchasedAt?: string }
 ): Promise<{ error?: string }> {
   const session = await verifySession();
 
@@ -203,6 +184,10 @@ export async function updatePurchaseLot(
   }
   if (updates.costPerUnit != null && (!Number.isFinite(updates.costPerUnit) || updates.costPerUnit < 0)) {
     return { error: "Cost must be zero or more." };
+  }
+  const purchasedAt = updates.purchasedAt != null ? parseDateInput(updates.purchasedAt) : undefined;
+  if (updates.purchasedAt != null && !purchasedAt) {
+    return { error: "Invalid date." };
   }
 
   try {
@@ -213,7 +198,10 @@ export async function updatePurchaseLot(
       const quantity = updates.quantity != null ? Math.floor(updates.quantity) : lot.quantity;
       const costPerUnit = "costPerUnit" in updates ? updates.costPerUnit : lot.costPerUnit;
 
-      await tx.purchaseLot.update({ where: { id: lot.id }, data: { quantity, costPerUnit } });
+      await tx.purchaseLot.update({
+        where: { id: lot.id },
+        data: { quantity, costPerUnit, purchasedAt: purchasedAt ?? lot.purchasedAt },
+      });
       await recomputePosition(tx, session.userId, {
         cardId: lot.cardId,
         sealedProductId: lot.sealedProductId,
@@ -236,7 +224,13 @@ export async function updatePurchaseLot(
 // updatePurchaseLot.
 export async function updateTransaction(
   transactionId: string,
-  updates: { quantity?: number; salePricePerUnit?: number; feesTotal?: number | null; shippingCost?: number | null }
+  updates: {
+    quantity?: number;
+    salePricePerUnit?: number;
+    feesTotal?: number | null;
+    shippingCost?: number | null;
+    soldAt?: string;
+  }
 ): Promise<{ error?: string }> {
   const session = await verifySession();
 
@@ -254,6 +248,10 @@ export async function updateTransaction(
   }
   if (updates.shippingCost != null && (!Number.isFinite(updates.shippingCost) || updates.shippingCost < 0)) {
     return { error: "Shipping must be zero or more." };
+  }
+  const soldAt = updates.soldAt != null ? parseDateInput(updates.soldAt) : undefined;
+  if (updates.soldAt != null && !soldAt) {
+    return { error: "Invalid date." };
   }
 
   try {
@@ -273,7 +271,7 @@ export async function updateTransaction(
 
       await tx.transaction.update({
         where: { id: txn.id },
-        data: { quantity, salePricePerUnit, feesTotal, shippingCost, profit },
+        data: { quantity, salePricePerUnit, feesTotal, shippingCost, profit, soldAt: soldAt ?? txn.soldAt },
       });
       await recomputePosition(tx, session.userId, {
         cardId: txn.cardId,
@@ -291,7 +289,12 @@ export async function updateTransaction(
   return {};
 }
 
-export async function removeFromCollection(collectionItemId: string): Promise<void> {
+// Deletes an entire position: the CollectionItem plus every PurchaseLot and
+// Transaction that fed it (same (userId, cardId|sealedProductId, condition)
+// key recomputePosition uses). This is a full wipe of that position's
+// history, not a quantity decrement -- the UI must confirm with the user
+// before calling this, since it can't be undone.
+export async function deletePosition(collectionItemId: string): Promise<void> {
   const session = await verifySession();
 
   await prisma.$transaction(async (tx) => {
@@ -300,18 +303,18 @@ export async function removeFromCollection(collectionItemId: string): Promise<vo
     });
     if (!item) return;
 
-    if (item.quantity <= 1) {
-      await tx.collectionItem.delete({ where: { id: item.id } });
-    } else {
-      await tx.collectionItem.update({
-        where: { id: item.id },
-        data: { quantity: { decrement: 1 } },
-      });
-    }
+    const where = item.cardId
+      ? { userId: session.userId, cardId: item.cardId, condition: item.condition }
+      : { userId: session.userId, sealedProductId: item.sealedProductId, condition: item.condition };
+
+    await tx.transaction.deleteMany({ where });
+    await tx.purchaseLot.deleteMany({ where });
+    await tx.collectionItem.delete({ where: { id: item.id } });
   });
 
   revalidatePath("/dashboard");
   revalidatePath("/portfolio");
+  revalidatePath("/transactions");
 }
 
 export async function sellCollectionItem(

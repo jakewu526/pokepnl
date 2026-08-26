@@ -87,6 +87,51 @@ function EditableAmountCell({
   );
 }
 
+// Same blur-to-save pattern as EditableAmountCell, but for the date column --
+// a plain <input type="date"> instead of a number input.
+function EditableDateCell({
+  value,
+  onCommit,
+}: {
+  value: string;
+  onCommit: (next: string) => Promise<{ error?: string }>;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function commit() {
+    if (!draft || draft === value) {
+      setDraft(value);
+      return;
+    }
+    startTransition(async () => {
+      const result = await onCommit(draft);
+      if (result.error) {
+        setError(result.error);
+        setDraft(value);
+      } else {
+        setError(null);
+      }
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <input
+        type="date"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        disabled={pending}
+        aria-label="Date"
+        className="h-7 w-36 rounded-full border border-line bg-paper px-2 font-data text-xs text-ink outline-none focus:border-emerald disabled:opacity-60"
+      />
+      {error && <p className="font-body text-[10px] text-amber">{error}</p>}
+    </div>
+  );
+}
+
 function RowThumb({ imageUrl, name }: { imageUrl: string | null; name: string }) {
   return (
     <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded bg-line/40">
@@ -134,7 +179,16 @@ export function SellTable({
 
             return (
               <tr key={tx.id} className="border-b border-line last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-data text-xs text-ink-muted">{tx.soldAt}</td>
+                <td className="whitespace-nowrap px-3 py-2 font-data text-xs text-ink-muted">
+                  {editable ? (
+                    <EditableDateCell
+                      value={tx.soldAt}
+                      onCommit={(next) => updateTransaction(tx.id, { soldAt: next })}
+                    />
+                  ) : (
+                    tx.soldAt
+                  )}
+                </td>
                 <td className="px-3 py-2 text-ink">
                   <div className="flex items-center gap-2">
                     <RowThumb imageUrl={tx.imageUrl} name={tx.itemName} />
@@ -224,7 +278,16 @@ export function BuyTable({
 
             return (
               <tr key={p.id} className="border-b border-line last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-data text-xs text-ink-muted">{p.purchasedAt}</td>
+                <td className="whitespace-nowrap px-3 py-2 font-data text-xs text-ink-muted">
+                  {editable ? (
+                    <EditableDateCell
+                      value={p.purchasedAt}
+                      onCommit={(next) => updatePurchaseLot(p.id, { purchasedAt: next })}
+                    />
+                  ) : (
+                    p.purchasedAt
+                  )}
+                </td>
                 <td className="px-3 py-2 text-ink">
                   <div className="flex items-center gap-2">
                     <RowThumb imageUrl={p.imageUrl} name={p.itemName} />
@@ -260,6 +323,129 @@ export function BuyTable({
                   ) : (
                     "—"
                   )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export type MergedRow =
+  | { kind: "buy"; date: string; row: PurchaseListItem }
+  | { kind: "sell"; date: string; row: TransactionListItem };
+
+// Combined view for /transactions's "Merged" toggle. Each row routes its
+// edits to updatePurchaseLot or updateTransaction depending on `kind`, since
+// buys and sells are still backed by different tables/actions under the hood.
+export function MergedTable({ rows, editable = false }: { rows: MergedRow[]; editable?: boolean }) {
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="overflow-x-auto rounded-card border border-line bg-paper-raised">
+      <table className="w-full min-w-[640px] text-left font-body text-sm">
+        <thead>
+          <tr className="border-b border-line text-xs text-ink-muted">
+            <th className="px-3 py-2 font-medium">Date</th>
+            <th className="px-3 py-2 font-medium">Type</th>
+            <th className="px-3 py-2 font-medium">Item</th>
+            <th className="px-3 py-2 font-medium">Qty</th>
+            <th className="px-3 py-2 font-medium">Price</th>
+            <th className="px-3 py-2 font-medium">Net profit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const item = r.row;
+            const itemLabel = (
+              <>
+                {item.itemName}
+                {item.condition && (
+                  <span className="text-ink-muted"> · {CONDITION_LABELS[item.condition as Condition] ?? item.condition}</span>
+                )}
+              </>
+            );
+            const href = itemHref(item.itemType, item.itemId);
+            const price = r.kind === "buy" ? r.row.costPerUnit : r.row.salePricePerUnit;
+            const profit = r.kind === "sell" ? r.row.profit : null;
+
+            return (
+              <tr key={`${r.kind}-${item.id}`} className="border-b border-line last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-data text-xs text-ink-muted">
+                  {editable ? (
+                    <EditableDateCell
+                      value={r.date}
+                      onCommit={(next) =>
+                        r.kind === "buy"
+                          ? updatePurchaseLot(item.id, { purchasedAt: next })
+                          : updateTransaction(item.id, { soldAt: next })
+                      }
+                    />
+                  ) : (
+                    r.date
+                  )}
+                </td>
+                <td className="px-3 py-2">
+                  <span
+                    className={`rounded-full px-2 py-0.5 font-body text-[11px] font-medium ${
+                      r.kind === "buy" ? "bg-emerald/10 text-emerald-strong" : "bg-amber-tint text-amber"
+                    }`}
+                  >
+                    {r.kind === "buy" ? "Buy" : "Sell"}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-ink">
+                  <div className="flex items-center gap-2">
+                    <RowThumb imageUrl={item.imageUrl} name={item.itemName} />
+                    {href ? (
+                      <Link href={href} className="hover:underline">
+                        {itemLabel}
+                      </Link>
+                    ) : (
+                      <span>{itemLabel}</span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-3 py-2 font-data text-ink-muted">
+                  {editable ? (
+                    <EditableAmountCell
+                      value={item.quantity}
+                      kind="quantity"
+                      onCommit={(next) =>
+                        r.kind === "buy"
+                          ? updatePurchaseLot(item.id, { quantity: next })
+                          : updateTransaction(item.id, { quantity: next })
+                      }
+                    />
+                  ) : (
+                    item.quantity
+                  )}
+                </td>
+                <td className="px-3 py-2 font-data text-ink-muted">
+                  {editable ? (
+                    <EditableAmountCell
+                      value={price ?? 0}
+                      kind="currency"
+                      onCommit={(next) =>
+                        r.kind === "buy"
+                          ? updatePurchaseLot(item.id, { costPerUnit: next })
+                          : updateTransaction(item.id, { salePricePerUnit: next })
+                      }
+                    />
+                  ) : price != null ? (
+                    priceFormatter.format(price)
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td
+                  className={`px-3 py-2 font-data font-medium ${
+                    profit == null ? "text-ink-muted" : profit < 0 ? "text-amber" : "text-emerald-strong"
+                  }`}
+                >
+                  {profit != null ? signedPrice(profit) : "—"}
                 </td>
               </tr>
             );

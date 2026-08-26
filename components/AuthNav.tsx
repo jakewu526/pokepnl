@@ -29,6 +29,9 @@ export async function AuthNav() {
       <Link href="/portfolio" className="font-medium text-emerald-strong hover:underline">
         My Portfolio
       </Link>
+      <Link href="/transactions" className="font-medium text-emerald-strong hover:underline">
+        My Transactions
+      </Link>
       <Link href="/watchlist" className="font-medium text-emerald-strong hover:underline">
         Watchlist
       </Link>

@@ -76,6 +76,8 @@ export function PortfolioItemTile({
         <div className="mt-auto pt-2">
           <SellOrDeleteButton
             collectionItemId={collectionItemId}
+            itemName={name}
+            imageUrl={imageUrl}
             quantity={quantity}
             marketPrice={marketPrice}
           />

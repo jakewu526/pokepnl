@@ -12,10 +12,11 @@ function parseLocalDate(date: string): Date {
   return new Date(y, m - 1, d);
 }
 
-// The first true overlay in this codebase -- everything else that "pops up"
-// (AddToCollectionForm, SellOrDeleteButton) expands inline in place. A day's
-// full transaction list doesn't fit inline in a timeline column, so this is
-// a real fixed-inset dialog instead.
+// One of a few fixed-inset overlays in this codebase, alongside
+// PositionActivityModal and SellOrDeleteButton's sell dialog. AddToCollectionForm
+// is the one holdout that still expands inline in place. A day's full
+// transaction list doesn't fit inline in a timeline column, so this is a real
+// dialog instead.
 export function DayActivityModal({ date, onClose }: { date: string | null; onClose: () => void }) {
   const [activity, setActivity] = useState<DayActivity | null>(null);
   const [isPending, startTransition] = useTransition();
