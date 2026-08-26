@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { AuthNav } from "@/components/AuthNav";
 import { StatTile } from "@/components/StatTile";
 import { PortfolioItemTile } from "@/components/PortfolioItemTile";
+import { PortfolioTableRow } from "@/components/PortfolioTableRow";
 import { CONDITION_LABELS, CONDITION_MULTIPLIERS, type Condition } from "@/lib/condition";
 import { SEALED_TYPE_LABELS, type SealedProductType } from "@/lib/sealed";
 import { getPortfolioData } from "@/lib/portfolio";
@@ -12,6 +13,7 @@ import { getLatestSealedPrices } from "@/lib/sealed";
 
 type SortKey = "recent" | "value" | "unrealized-abs" | "unrealized-pct";
 type TypeFilter = "all" | "cards" | "sealed";
+type ViewMode = "grid" | "table";
 
 function isSortKey(value: string | undefined): value is SortKey {
   return value === "recent" || value === "value" || value === "unrealized-abs" || value === "unrealized-pct";
@@ -21,15 +23,20 @@ function isTypeFilter(value: string | undefined): value is TypeFilter {
   return value === "all" || value === "cards" || value === "sealed";
 }
 
+function isViewMode(value: string | undefined): value is ViewMode {
+  return value === "grid" || value === "table";
+}
+
 export default async function PortfolioPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sort?: string; type?: string }>;
+  searchParams: Promise<{ sort?: string; type?: string; view?: string }>;
 }) {
   const session = await verifySession();
   const params = await searchParams;
   const sort: SortKey = isSortKey(params.sort) ? params.sort : "recent";
   const type: TypeFilter = isTypeFilter(params.type) ? params.type : "all";
+  const view: ViewMode = isViewMode(params.view) ? params.view : "grid";
 
   const [items, portfolio] = await Promise.all([
     prisma.collectionItem.findMany({
@@ -104,6 +111,7 @@ export default async function PortfolioPage({
     const p = new URLSearchParams();
     if (nextSort !== "recent") p.set("sort", nextSort);
     if (type !== "all") p.set("type", type);
+    if (view !== "grid") p.set("view", view);
     const qs = p.toString();
     return qs ? `/portfolio?${qs}` : "/portfolio";
   }
@@ -112,6 +120,16 @@ export default async function PortfolioPage({
     const p = new URLSearchParams();
     if (sort !== "recent") p.set("sort", sort);
     if (nextType !== "all") p.set("type", nextType);
+    if (view !== "grid") p.set("view", view);
+    const qs = p.toString();
+    return qs ? `/portfolio?${qs}` : "/portfolio";
+  }
+
+  function viewHref(nextView: ViewMode): string {
+    const p = new URLSearchParams();
+    if (sort !== "recent") p.set("sort", sort);
+    if (type !== "all") p.set("type", type);
+    if (nextView !== "grid") p.set("view", nextView);
     const qs = p.toString();
     return qs ? `/portfolio?${qs}` : "/portfolio";
   }
@@ -189,6 +207,21 @@ export default async function PortfolioPage({
                   {opt.label}
                 </Link>
               ))}
+
+              <div role="group" className="ml-1 flex items-center gap-1 rounded-full border border-line bg-paper-raised p-1">
+                {(["grid", "table"] as const).map((mode) => (
+                  <Link
+                    key={mode}
+                    href={viewHref(mode)}
+                    aria-pressed={view === mode}
+                    className={`rounded-full px-3 py-1.5 font-body text-xs font-medium capitalize transition ${
+                      view === mode ? "bg-emerald text-paper-raised" : "text-ink-muted hover:text-ink"
+                    }`}
+                  >
+                    {mode}
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -199,6 +232,65 @@ export default async function PortfolioPage({
             <p className="font-body text-sm text-ink-muted">
               Browse cards and add them to your portfolio to see them here.
             </p>
+          </div>
+        ) : view === "table" ? (
+          <div className="overflow-x-auto rounded-card border border-line bg-paper-raised">
+            <table className="w-full min-w-[880px] text-left font-body text-sm">
+              <thead>
+                <tr className="border-b border-line text-xs text-ink-muted">
+                  <th className="px-3 py-2 font-medium">Item</th>
+                  <th className="px-3 py-2 font-medium">Condition</th>
+                  <th className="px-3 py-2 font-medium">Qty</th>
+                  <th className="px-3 py-2 font-medium">Cost/unit</th>
+                  <th className="px-3 py-2 font-medium">Market</th>
+                  <th className="px-3 py-2 font-medium">Value</th>
+                  <th className="px-3 py-2 font-medium">Unrealized</th>
+                  <th className="px-3 py-2 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {enriched.map(({ item, marketPrice, cost, unrealizedAbs, unrealizedPct }) =>
+                  item.card ? (
+                    <PortfolioTableRow
+                      key={item.id}
+                      href={`/cards/${item.card.id}`}
+                      imageUrl={item.card.imageUrl}
+                      imageAlt={item.card.name}
+                      itemType="card"
+                      name={item.card.name}
+                      setName={item.card.set.name}
+                      condition={item.condition}
+                      quantity={item.quantity}
+                      cost={cost}
+                      marketPrice={marketPrice}
+                      unrealizedAbs={unrealizedAbs}
+                      unrealizedPct={unrealizedPct}
+                      collectionItemId={item.id}
+                    />
+                  ) : item.sealedProduct ? (
+                    <PortfolioTableRow
+                      key={item.id}
+                      href={`/sealed/${item.sealedProduct.id}`}
+                      imageUrl={item.sealedProduct.imageUrl}
+                      imageAlt={item.sealedProduct.name}
+                      itemType="sealed"
+                      name={item.sealedProduct.name}
+                      setName={
+                        item.sealedProduct.set?.name ??
+                        SEALED_TYPE_LABELS[item.sealedProduct.type as SealedProductType]
+                      }
+                      condition={item.condition}
+                      quantity={item.quantity}
+                      cost={cost}
+                      marketPrice={marketPrice}
+                      unrealizedAbs={unrealizedAbs}
+                      unrealizedPct={unrealizedPct}
+                      collectionItemId={item.id}
+                    />
+                  ) : null
+                )}
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">

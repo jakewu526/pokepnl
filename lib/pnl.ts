@@ -124,11 +124,16 @@ export type TransactionListItem = {
   imageUrl: string | null;
 };
 
-export async function getTransactionHistory(userId: string, limit?: number): Promise<TransactionListItem[]> {
+export async function getTransactionHistory(
+  userId: string,
+  limit?: number,
+  skip?: number
+): Promise<TransactionListItem[]> {
   const rows = await prisma.transaction.findMany({
     where: { userId },
     orderBy: { soldAt: "desc" },
     take: limit,
+    skip,
     include: {
       card: { select: { imageUrl: true } },
       sealedProduct: { select: { imageUrl: true } },
@@ -155,6 +160,10 @@ export async function getTransactionHistory(userId: string, limit?: number): Pro
   }));
 }
 
+export async function getTransactionCount(userId: string): Promise<number> {
+  return prisma.transaction.count({ where: { userId } });
+}
+
 export type PurchaseListItem = {
   id: string;
   itemName: string;
@@ -167,16 +176,15 @@ export type PurchaseListItem = {
   imageUrl: string | null;
 };
 
-// The "buying" side of the transaction history. There's no separate
-// per-purchase ledger -- costPerUnit/createdAt on CollectionItem already are
-// the purchase price and date (captured once, at add-to-collection time), so
-// this reads current holdings the same way getTransactionHistory reads sales,
-// rather than introducing a new table.
-export async function getPurchaseHistory(userId: string, limit?: number): Promise<PurchaseListItem[]> {
+// The "buying" side of the transaction history -- current holdings, one row
+// per position (not per individual buy event; see getPositionLedger for the
+// per-event PurchaseLot view used by the portfolio table's drill-down).
+export async function getPurchaseHistory(userId: string, limit?: number, skip?: number): Promise<PurchaseListItem[]> {
   const rows = await prisma.collectionItem.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
     take: limit,
+    skip,
     include: {
       card: { select: { name: true, imageUrl: true } },
       sealedProduct: { select: { name: true, imageUrl: true } },
@@ -194,4 +202,115 @@ export async function getPurchaseHistory(userId: string, limit?: number): Promis
     itemId: row.cardId ?? row.sealedProductId ?? null,
     imageUrl: row.card?.imageUrl ?? row.sealedProduct?.imageUrl ?? null,
   }));
+}
+
+export async function getPurchaseCount(userId: string): Promise<number> {
+  return prisma.collectionItem.count({ where: { userId } });
+}
+
+type PurchaseLotRow = {
+  id: string;
+  cardId: string | null;
+  sealedProductId: string | null;
+  condition: string | null;
+  quantity: number;
+  costPerUnit: { toString(): string } | null;
+  purchasedAt: Date;
+  card: { name: string; imageUrl: string | null } | null;
+  sealedProduct: { name: string; imageUrl: string | null } | null;
+};
+
+function mapPurchaseLotRow(row: PurchaseLotRow): PurchaseListItem {
+  return {
+    id: row.id,
+    itemName: row.card?.name ?? row.sealedProduct?.name ?? "Unknown item",
+    condition: row.condition,
+    quantity: row.quantity,
+    costPerUnit: row.costPerUnit != null ? parseFloat(row.costPerUnit.toString()) : null,
+    purchasedAt: row.purchasedAt.toISOString().slice(0, 10),
+    itemType: row.cardId ? "card" : "sealed",
+    itemId: row.cardId ?? row.sealedProductId ?? null,
+    imageUrl: row.card?.imageUrl ?? row.sealedProduct?.imageUrl ?? null,
+  };
+}
+
+// The individual buy-event ledger (every PurchaseLot row, never merged) --
+// what /transactions shows and lets the user edit, as opposed to
+// getPurchaseHistory's one-row-per-current-position view used for the
+// dashboard's quick "recently added" glance.
+export async function getAllPurchaseLots(userId: string, limit?: number, skip?: number): Promise<PurchaseListItem[]> {
+  const rows = await prisma.purchaseLot.findMany({
+    where: { userId },
+    orderBy: { purchasedAt: "desc" },
+    take: limit,
+    skip,
+    include: {
+      card: { select: { name: true, imageUrl: true } },
+      sealedProduct: { select: { name: true, imageUrl: true } },
+    },
+  });
+  return rows.map(mapPurchaseLotRow);
+}
+
+export async function getPurchaseLotCount(userId: string): Promise<number> {
+  return prisma.purchaseLot.count({ where: { userId } });
+}
+
+export type PositionLedger = {
+  purchases: PurchaseListItem[];
+  sales: TransactionListItem[];
+};
+
+// Drill-down for a single position (one CollectionItem's card/sealedProduct +
+// condition key): every PurchaseLot that built it up, plus every Transaction
+// that has ever sold out of it. Matches by the position's *current* condition
+// string -- if a position's condition is edited later, older lots/sales
+// recorded under the old value won't show up anymore (same key convention
+// CollectionItem's own unique constraint already relies on).
+export async function getPositionLedger(
+  userId: string,
+  key: { cardId: string | null; sealedProductId: string | null; condition: string | null }
+): Promise<PositionLedger> {
+  const where = key.cardId
+    ? { userId, cardId: key.cardId, condition: key.condition }
+    : { userId, sealedProductId: key.sealedProductId, condition: key.condition };
+
+  const [lotRows, saleRows] = await Promise.all([
+    prisma.purchaseLot.findMany({
+      where,
+      orderBy: { purchasedAt: "desc" },
+      include: {
+        card: { select: { name: true, imageUrl: true } },
+        sealedProduct: { select: { name: true, imageUrl: true } },
+      },
+    }),
+    prisma.transaction.findMany({
+      where,
+      orderBy: { soldAt: "desc" },
+      include: {
+        card: { select: { imageUrl: true } },
+        sealedProduct: { select: { imageUrl: true } },
+      },
+    }),
+  ]);
+
+  const purchases: PurchaseListItem[] = lotRows.map(mapPurchaseLotRow);
+
+  const sales: TransactionListItem[] = saleRows.map((row) => ({
+    id: row.id,
+    itemName: row.itemName,
+    condition: row.condition,
+    quantity: row.quantity,
+    costPerUnit: row.costPerUnit != null ? parseFloat(row.costPerUnit.toString()) : null,
+    salePricePerUnit: parseFloat(row.salePricePerUnit.toString()),
+    feesTotal: row.feesTotal != null ? parseFloat(row.feesTotal.toString()) : null,
+    shippingCost: row.shippingCost != null ? parseFloat(row.shippingCost.toString()) : null,
+    profit: row.profit != null ? parseFloat(row.profit.toString()) : null,
+    soldAt: row.soldAt.toISOString().slice(0, 10),
+    itemType: row.cardId ? "card" : "sealed",
+    itemId: row.cardId ?? row.sealedProductId ?? null,
+    imageUrl: row.card?.imageUrl ?? row.sealedProduct?.imageUrl ?? null,
+  }));
+
+  return { purchases, sales };
 }

@@ -45,6 +45,7 @@ model Card {
   transactions    Transaction[]
   watchlistItems  WatchlistItem[]
   latestPrice     CardLatestPrice?
+  purchaseLots    PurchaseLot[]
 
   @@index([setId, number])
   @@index([name])
@@ -79,6 +80,7 @@ model User {
   collectionItems CollectionItem[]
   transactions    Transaction[]
   watchlistItems  WatchlistItem[]
+  purchaseLots    PurchaseLot[]
 }
 
 model CollectionItem {
@@ -139,6 +141,33 @@ model Transaction {
   @@index([userId, soldAt])
 }
 
+// One row per buy event (never merged) -- the audit trail behind
+// CollectionItem's running quantity/weighted-avg costPerUnit, which stays the
+// aggregate source of truth for display/sort/sell. Written in the same
+// $transaction as the CollectionItem update on every add-to-collection call,
+// so CollectionItem.quantity always equals
+// sum(PurchaseLot.quantity) - sum(Transaction.quantity) for the same
+// (userId, cardId|sealedProductId, condition) key. Lets the portfolio table's
+// drill-down show every buy that built up a position, not just the current
+// average.
+model PurchaseLot {
+  id              String   @id @default(cuid())
+  userId          String
+  cardId          String?
+  sealedProductId String?
+  condition       String?
+  quantity        Int
+  costPerUnit     Decimal? @db.Decimal(10, 2)
+  purchasedAt     DateTime @default(now())
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card          Card?          @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  sealedProduct SealedProduct? @relation(fields: [sealedProductId], references: [id], onDelete: SetNull)
+
+  @@index([userId, cardId, condition])
+  @@index([userId, sealedProductId, condition])
+}
+
 enum SealedProductType {
   BOOSTER_BOX
   BOOSTER_PACK
@@ -179,6 +208,7 @@ model SealedProduct {
   collectionItems CollectionItem[]
   transactions    Transaction[]
   watchlistItems  WatchlistItem[]
+  purchaseLots    PurchaseLot[]
 
   @@unique([setId, name])
   @@index([name])

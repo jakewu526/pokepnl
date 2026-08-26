@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/app/generated/prisma/client";
 import { verifySession } from "@/lib/dal";
+import { getPositionLedger, type PositionLedger } from "@/lib/pnl";
 
 // Weighted-average cost basis when the same item is added again. Omitting a
 // cost on a repeat add means "no new information," not "$0" -- keep
@@ -18,6 +20,62 @@ function mergeCost(
   return (existingCost * existingQty + incomingCost * incomingQty) / (existingQty + incomingQty);
 }
 
+type PositionKey = { cardId: string | null; sealedProductId: string | null; condition: string | null };
+
+// Positions are built from transactions, not maintained as independent state:
+// this replays every PurchaseLot (via the same mergeCost weighted-average math
+// used at write time) and nets out every Transaction for the same
+// (userId, cardId|sealedProductId, condition) key, then makes CollectionItem
+// match. Called at the end of every ledger-writing action (add, sell, and the
+// lot/transaction edits below) inside the same $transaction as that write, so
+// CollectionItem can never drift from its own ledger. Throws if an edit would
+// reduce recorded purchases below what's already been sold -- callers catch
+// that and surface it as a validation error.
+async function recomputePosition(tx: Prisma.TransactionClient, userId: string, key: PositionKey): Promise<void> {
+  const where = key.cardId
+    ? { userId, cardId: key.cardId, condition: key.condition }
+    : { userId, sealedProductId: key.sealedProductId, condition: key.condition };
+
+  const lots = await tx.purchaseLot.findMany({ where, orderBy: { purchasedAt: "asc" } });
+
+  let totalBought = 0;
+  let costPerUnit: number | null = null;
+  let earliestPurchasedAt: Date | null = null;
+  for (const lot of lots) {
+    const lotCost = lot.costPerUnit != null ? parseFloat(lot.costPerUnit.toString()) : undefined;
+    costPerUnit = mergeCost(costPerUnit, totalBought, lotCost, lot.quantity);
+    totalBought += lot.quantity;
+    if (earliestPurchasedAt == null) earliestPurchasedAt = lot.purchasedAt;
+  }
+
+  const soldAgg = await tx.transaction.aggregate({ where, _sum: { quantity: true } });
+  const soldQty = soldAgg._sum.quantity ?? 0;
+  const remaining = totalBought - soldQty;
+
+  const existing = await tx.collectionItem.findFirst({ where });
+
+  if (remaining < 0) {
+    throw new Error("This would reduce recorded purchases below what's already been sold.");
+  }
+  if (remaining === 0) {
+    if (existing) await tx.collectionItem.delete({ where: { id: existing.id } });
+    return;
+  }
+
+  const data = {
+    quantity: remaining,
+    costPerUnit,
+    createdAt: earliestPurchasedAt ?? new Date(),
+  };
+  if (existing) {
+    await tx.collectionItem.update({ where: { id: existing.id }, data });
+  } else {
+    await tx.collectionItem.create({
+      data: { userId, cardId: key.cardId, sealedProductId: key.sealedProductId, condition: key.condition, ...data },
+    });
+  }
+}
+
 export async function addToCollection(
   cardId: string,
   condition: string = "NM",
@@ -28,26 +86,10 @@ export async function addToCollection(
   const qty = Number.isFinite(quantity) && quantity >= 1 ? Math.floor(quantity) : 1;
 
   await prisma.$transaction(async (tx) => {
-    const existing = await tx.collectionItem.findUnique({
-      where: { userId_cardId_condition: { userId: session.userId, cardId, condition } },
+    await tx.purchaseLot.create({
+      data: { userId: session.userId, cardId, condition, costPerUnit, quantity: qty },
     });
-
-    if (existing) {
-      const mergedCost = mergeCost(
-        existing.costPerUnit != null ? parseFloat(existing.costPerUnit.toString()) : null,
-        existing.quantity,
-        costPerUnit,
-        qty
-      );
-      await tx.collectionItem.update({
-        where: { id: existing.id },
-        data: { quantity: { increment: qty }, costPerUnit: mergedCost },
-      });
-    } else {
-      await tx.collectionItem.create({
-        data: { userId: session.userId, cardId, condition, costPerUnit, quantity: qty },
-      });
-    }
+    await recomputePosition(tx, session.userId, { cardId, sealedProductId: null, condition });
   });
 
   revalidatePath("/dashboard");
@@ -64,26 +106,10 @@ export async function batchAddToCollection(
   await prisma.$transaction(async (tx) => {
     for (const { cardId, price } of items) {
       const costPerUnit = price ?? undefined;
-      const existing = await tx.collectionItem.findUnique({
-        where: { userId_cardId_condition: { userId: session.userId, cardId, condition: "NM" } },
+      await tx.purchaseLot.create({
+        data: { userId: session.userId, cardId, condition: "NM", costPerUnit, quantity: 1 },
       });
-
-      if (existing) {
-        const mergedCost = mergeCost(
-          existing.costPerUnit != null ? parseFloat(existing.costPerUnit.toString()) : null,
-          existing.quantity,
-          costPerUnit,
-          1
-        );
-        await tx.collectionItem.update({
-          where: { id: existing.id },
-          data: { quantity: { increment: 1 }, costPerUnit: mergedCost },
-        });
-      } else {
-        await tx.collectionItem.create({
-          data: { userId: session.userId, cardId, condition: "NM", costPerUnit, quantity: 1 },
-        });
-      }
+      await recomputePosition(tx, session.userId, { cardId, sealedProductId: null, condition: "NM" });
     }
   });
 
@@ -102,33 +128,167 @@ export async function addSealedToCollection(
   const qty = Number.isFinite(quantity) && quantity >= 1 ? Math.floor(quantity) : 1;
 
   await prisma.$transaction(async (tx) => {
-    const existing = await tx.collectionItem.findUnique({
-      where: {
-        userId_sealedProductId_condition: { userId: session.userId, sealedProductId, condition },
-      },
+    await tx.purchaseLot.create({
+      data: { userId: session.userId, sealedProductId, condition, costPerUnit, quantity: qty },
     });
-
-    if (existing) {
-      const mergedCost = mergeCost(
-        existing.costPerUnit != null ? parseFloat(existing.costPerUnit.toString()) : null,
-        existing.quantity,
-        costPerUnit,
-        qty
-      );
-      await tx.collectionItem.update({
-        where: { id: existing.id },
-        data: { quantity: { increment: qty }, costPerUnit: mergedCost },
-      });
-    } else {
-      await tx.collectionItem.create({
-        data: { userId: session.userId, sealedProductId, condition, costPerUnit, quantity: qty },
-      });
-    }
+    await recomputePosition(tx, session.userId, { cardId: null, sealedProductId, condition });
   });
 
   revalidatePath("/dashboard");
   revalidatePath("/portfolio");
   revalidatePath(`/sealed/${sealedProductId}`);
+}
+
+export async function updateCollectionItem(
+  collectionItemId: string,
+  updates: { quantity?: number; costPerUnit?: number | null; condition?: string }
+): Promise<void> {
+  const session = await verifySession();
+
+  const data: { quantity?: number; costPerUnit?: number | null; condition?: string } = {};
+  if (updates.quantity != null) {
+    if (!Number.isFinite(updates.quantity) || updates.quantity < 1) return;
+    data.quantity = Math.floor(updates.quantity);
+  }
+  if ("costPerUnit" in updates) {
+    if (updates.costPerUnit != null && (!Number.isFinite(updates.costPerUnit) || updates.costPerUnit < 0)) return;
+    data.costPerUnit = updates.costPerUnit;
+  }
+  if (updates.condition != null) {
+    data.condition = updates.condition;
+  }
+  if (Object.keys(data).length === 0) return;
+
+  await prisma.collectionItem.updateMany({
+    where: { id: collectionItemId, userId: session.userId },
+    data,
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/portfolio");
+}
+
+// Drill-down for the portfolio table's "History" button -- every buy/sell
+// event that built up (or drew down) this position, keyed off the position's
+// current cardId/sealedProductId/condition. See lib/pnl.ts's getPositionLedger
+// for the matching + sync caveats.
+export async function getPositionLedgerAction(collectionItemId: string): Promise<PositionLedger> {
+  const session = await verifySession();
+
+  const item = await prisma.collectionItem.findFirst({
+    where: { id: collectionItemId, userId: session.userId },
+    select: { cardId: true, sealedProductId: true, condition: true },
+  });
+  if (!item) return { purchases: [], sales: [] };
+
+  return getPositionLedger(session.userId, {
+    cardId: item.cardId,
+    sealedProductId: item.sealedProductId,
+    condition: item.condition,
+  });
+}
+
+// Fix a wrong price/quantity on a past buy. Recomputes the owning position
+// inside the same transaction so CollectionItem never drifts from its ledger;
+// rejected (without writing anything) if it would undersell the position's
+// own recorded sales.
+export async function updatePurchaseLot(
+  lotId: string,
+  updates: { quantity?: number; costPerUnit?: number | null }
+): Promise<{ error?: string }> {
+  const session = await verifySession();
+
+  if (updates.quantity != null && (!Number.isFinite(updates.quantity) || updates.quantity < 1)) {
+    return { error: "Quantity must be at least 1." };
+  }
+  if (updates.costPerUnit != null && (!Number.isFinite(updates.costPerUnit) || updates.costPerUnit < 0)) {
+    return { error: "Cost must be zero or more." };
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const lot = await tx.purchaseLot.findFirst({ where: { id: lotId, userId: session.userId } });
+      if (!lot) throw new Error("Purchase not found.");
+
+      const quantity = updates.quantity != null ? Math.floor(updates.quantity) : lot.quantity;
+      const costPerUnit = "costPerUnit" in updates ? updates.costPerUnit : lot.costPerUnit;
+
+      await tx.purchaseLot.update({ where: { id: lot.id }, data: { quantity, costPerUnit } });
+      await recomputePosition(tx, session.userId, {
+        cardId: lot.cardId,
+        sealedProductId: lot.sealedProductId,
+        condition: lot.condition,
+      });
+    });
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Update failed." };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/portfolio");
+  revalidatePath("/transactions");
+  return {};
+}
+
+// Fix a wrong price/quantity/fees on a past sale. costPerUnit is never edited
+// here -- it's what was actually paid, captured at sale time -- but profit is
+// always recalculated from it. Same recompute-and-validate flow as
+// updatePurchaseLot.
+export async function updateTransaction(
+  transactionId: string,
+  updates: { quantity?: number; salePricePerUnit?: number; feesTotal?: number | null; shippingCost?: number | null }
+): Promise<{ error?: string }> {
+  const session = await verifySession();
+
+  if (updates.quantity != null && (!Number.isFinite(updates.quantity) || updates.quantity < 1)) {
+    return { error: "Quantity must be at least 1." };
+  }
+  if (
+    updates.salePricePerUnit != null &&
+    (!Number.isFinite(updates.salePricePerUnit) || updates.salePricePerUnit < 0)
+  ) {
+    return { error: "Sale price must be zero or more." };
+  }
+  if (updates.feesTotal != null && (!Number.isFinite(updates.feesTotal) || updates.feesTotal < 0)) {
+    return { error: "Fees must be zero or more." };
+  }
+  if (updates.shippingCost != null && (!Number.isFinite(updates.shippingCost) || updates.shippingCost < 0)) {
+    return { error: "Shipping must be zero or more." };
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const txn = await tx.transaction.findFirst({ where: { id: transactionId, userId: session.userId } });
+      if (!txn) throw new Error("Sale not found.");
+
+      const quantity = updates.quantity != null ? Math.floor(updates.quantity) : txn.quantity;
+      const salePricePerUnit =
+        updates.salePricePerUnit != null ? updates.salePricePerUnit : parseFloat(txn.salePricePerUnit.toString());
+      const feesTotal = "feesTotal" in updates ? updates.feesTotal : txn.feesTotal;
+      const shippingCost = "shippingCost" in updates ? updates.shippingCost : txn.shippingCost;
+      const costPerUnit = txn.costPerUnit != null ? parseFloat(txn.costPerUnit.toString()) : null;
+      const feesValue = feesTotal != null ? parseFloat(feesTotal.toString()) : 0;
+      const shippingValue = shippingCost != null ? parseFloat(shippingCost.toString()) : 0;
+      const profit = costPerUnit != null ? (salePricePerUnit - costPerUnit) * quantity - feesValue - shippingValue : null;
+
+      await tx.transaction.update({
+        where: { id: txn.id },
+        data: { quantity, salePricePerUnit, feesTotal, shippingCost, profit },
+      });
+      await recomputePosition(tx, session.userId, {
+        cardId: txn.cardId,
+        sealedProductId: txn.sealedProductId,
+        condition: txn.condition,
+      });
+    });
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Update failed." };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/portfolio");
+  revalidatePath("/transactions");
+  return {};
 }
 
 export async function removeFromCollection(collectionItemId: string): Promise<void> {
@@ -195,14 +355,11 @@ export async function sellCollectionItem(
       },
     });
 
-    if (quantity >= item.quantity) {
-      await tx.collectionItem.delete({ where: { id: item.id } });
-    } else {
-      await tx.collectionItem.update({
-        where: { id: item.id },
-        data: { quantity: { decrement: quantity } },
-      });
-    }
+    await recomputePosition(tx, session.userId, {
+      cardId: item.cardId,
+      sealedProductId: item.sealedProductId,
+      condition: item.condition,
+    });
   });
 
   revalidatePath("/dashboard");
