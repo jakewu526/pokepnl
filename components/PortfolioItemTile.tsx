@@ -79,6 +79,9 @@ export function PortfolioItemTile({
         </p>
         <p className="font-data text-[13px] text-ink-muted">
           Value {marketValue != null ? priceFormatter.format(marketValue) : "—"}
+          {marketPrice != null && (
+            <span className="text-ink-muted/70"> ({priceFormatter.format(marketPrice)}/ea)</span>
+          )}
         </p>
         {unrealized != null && (
           <p
