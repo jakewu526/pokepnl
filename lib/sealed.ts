@@ -53,6 +53,25 @@ export async function getSealedCatalogStats(): Promise<{ productCount: number }>
 
 export type SealedFilters = { type?: string; language?: string };
 
+// Splits the query into whitespace-separated tokens and requires every token
+// to match at least one searchable field (product name or set name), so e.g.
+// "prismatic poster" finds "Prismatic Evolutions Poster Collection" even
+// though "poster" isn't adjacent to "prismatic" in the full name. Mirrors
+// buildCardSearchWhere in lib/cards.ts.
+function buildSealedSearchWhere(query: string) {
+  const tokens = query.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return {};
+
+  return {
+    AND: tokens.map((token) => ({
+      OR: [
+        { name: { contains: token, mode: "insensitive" as const } },
+        { set: { name: { contains: token, mode: "insensitive" as const } } },
+      ],
+    })),
+  };
+}
+
 export async function searchSealedProducts(
   query: string,
   page: number,
@@ -63,14 +82,7 @@ export async function searchSealedProducts(
     // Searching the set name as well as the product name matters now that
     // TCGplayer names don't always repeat the set ("Poke Ball with Two Mini
     // Tins") -- mirrors the multi-field search in lib/cards.ts.
-    ...(q
-      ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" as const } },
-            { set: { name: { contains: q, mode: "insensitive" as const } } },
-          ],
-        }
-      : {}),
+    ...buildSealedSearchWhere(q),
     ...(filters.type ? { type: filters.type as never } : {}),
     ...(filters.language ? { language: filters.language } : {}),
   };
@@ -146,12 +158,7 @@ export async function getSealedSuggestions(query: string): Promise<SealedProduct
   if (!trimmed) return [];
 
   const candidates = await prisma.sealedProduct.findMany({
-    where: {
-      OR: [
-        { name: { contains: trimmed, mode: "insensitive" as const } },
-        { set: { name: { contains: trimmed, mode: "insensitive" as const } } },
-      ],
-    },
+    where: buildSealedSearchWhere(trimmed),
     orderBy: [{ name: "asc" }],
     take: SEALED_SUGGESTION_LIMIT * 4,
     select: {

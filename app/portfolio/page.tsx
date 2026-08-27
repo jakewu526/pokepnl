@@ -298,7 +298,7 @@ export default async function PortfolioPage({
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
-            {enriched.map(({ item, marketPrice, cost, unrealizedAbs }) =>
+            {enriched.map(({ item, marketPrice, cost, unrealizedAbs, unrealizedPct }) =>
               item.card ? (
                 <PortfolioItemTile
                   key={item.id}
@@ -311,6 +311,7 @@ export default async function PortfolioPage({
                   quantity={item.quantity}
                   cost={cost}
                   unrealized={unrealizedAbs}
+                  unrealizedPct={unrealizedPct}
                   collectionItemId={item.id}
                   marketPrice={marketPrice}
                 />
@@ -329,6 +330,7 @@ export default async function PortfolioPage({
                   quantity={item.quantity}
                   cost={cost}
                   unrealized={unrealizedAbs}
+                  unrealizedPct={unrealizedPct}
                   collectionItemId={item.id}
                   marketPrice={marketPrice}
                 />

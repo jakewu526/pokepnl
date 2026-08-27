@@ -81,6 +81,28 @@ model User {
   transactions    Transaction[]
   watchlistItems  WatchlistItem[]
   purchaseLots    PurchaseLot[]
+  ebayAccount     EbayAccount?
+}
+
+// One user's connected eBay seller account (OAuth "authorization code" grant,
+// separate from lib/ebay.ts's app-level client-credentials token used for
+// price lookups). Holds the refresh token long-term and the current access
+// token, refreshed on demand by lib/ebay-orders.ts.
+model EbayAccount {
+  userId                String    @id
+  ebayUserId            String?
+  accessToken           String
+  accessTokenExpiresAt  DateTime
+  refreshToken          String
+  refreshTokenExpiresAt DateTime
+  // Cursor for incremental sync: fetchSoldOrders(userId, lastSyncedAt) only
+  // requests orders created after this timestamp once it's set. Null means
+  // "never synced" -- triggers the full-history backfill in fetchSoldOrders.
+  lastSyncedAt          DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model CollectionItem {
@@ -141,11 +163,15 @@ model Transaction {
   // Known marketplace code (see lib/marketplace.ts's MARKETPLACES) or, for
   // "Other", a freeform string typed by the user.
   marketplace      String?
+  // Dedup key for automated imports (e.g. "{ebayOrderId}:{ebayLineItemId}"
+  // from app/actions/ebay-import.ts). Null for manually-entered sales.
+  externalId       String?
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   card          Card?          @relation(fields: [cardId], references: [id], onDelete: SetNull)
   sealedProduct SealedProduct? @relation(fields: [sealedProductId], references: [id], onDelete: SetNull)
 
+  @@unique([userId, externalId])
   @@index([userId, soldAt])
 }
 

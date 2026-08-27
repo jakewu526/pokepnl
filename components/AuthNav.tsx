@@ -35,6 +35,9 @@ export async function AuthNav() {
       <Link href="/watchlist" className="font-medium text-emerald-strong hover:underline">
         Watchlist
       </Link>
+      <Link href="/settings" className="font-medium text-emerald-strong hover:underline">
+        Settings
+      </Link>
       <span className="hidden text-ink-muted sm:inline">{user.name ?? user.email}</span>
       <form action={logout}>
         <button type="submit" className="font-medium text-ink-muted hover:text-ink">

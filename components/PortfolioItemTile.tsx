@@ -6,9 +6,18 @@ const priceFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
 });
+const percentFormatter = new Intl.NumberFormat("en-US", {
+  style: "percent",
+  maximumFractionDigits: 1,
+});
 
 function signedPrice(value: number): string {
   const formatted = priceFormatter.format(Math.abs(value));
+  return value < 0 ? `-${formatted}` : `+${formatted}`;
+}
+
+function signedPercent(value: number): string {
+  const formatted = percentFormatter.format(Math.abs(value));
   return value < 0 ? `-${formatted}` : `+${formatted}`;
 }
 
@@ -25,6 +34,7 @@ export function PortfolioItemTile({
   quantity,
   cost,
   unrealized,
+  unrealizedPct,
   collectionItemId,
   marketPrice,
 }: {
@@ -37,9 +47,12 @@ export function PortfolioItemTile({
   quantity: number;
   cost: number | null;
   unrealized: number | null;
+  unrealizedPct: number | null;
   collectionItemId: string;
   marketPrice: number | null;
 }) {
+  const marketValue = marketPrice != null ? marketPrice * quantity : null;
+
   return (
     <div className="flex flex-col overflow-hidden rounded-card border border-line bg-paper-raised">
       <Link href={href} className="relative aspect-[5/7] bg-line/40">
@@ -64,6 +77,9 @@ export function PortfolioItemTile({
         <p className="font-data text-[13px] text-ink-muted">
           Cost {cost != null ? priceFormatter.format(cost) : "—"}
         </p>
+        <p className="font-data text-[13px] text-ink-muted">
+          Value {marketValue != null ? priceFormatter.format(marketValue) : "—"}
+        </p>
         {unrealized != null && (
           <p
             className={`font-data text-[13px] font-medium ${
@@ -71,6 +87,9 @@ export function PortfolioItemTile({
             }`}
           >
             {signedPrice(unrealized)}
+            {unrealizedPct != null && (
+              <span className="ml-1 font-body font-normal text-ink-muted">({signedPercent(unrealizedPct)})</span>
+            )}
           </p>
         )}
         <div className="mt-auto pt-2">
