@@ -51,11 +51,15 @@ async function recomputePosition(tx: Prisma.TransactionClient, userId: string, k
   let totalBought = 0;
   let costPerUnit: number | null = null;
   let earliestPurchasedAt: Date | null = null;
+  let latestMarketplace: string | null = null;
   for (const lot of lots) {
     const lotCost = lot.costPerUnit != null ? parseFloat(lot.costPerUnit.toString()) : undefined;
     costPerUnit = mergeCost(costPerUnit, totalBought, lotCost, lot.quantity);
     totalBought += lot.quantity;
     if (earliestPurchasedAt == null) earliestPurchasedAt = lot.purchasedAt;
+    // Lots are ordered ascending by purchasedAt, so the last one processed is
+    // the most recent -- keep overwriting so this ends up as that lot's value.
+    latestMarketplace = lot.marketplace;
   }
 
   const soldAgg = await tx.transaction.aggregate({ where, _sum: { quantity: true } });
@@ -76,6 +80,7 @@ async function recomputePosition(tx: Prisma.TransactionClient, userId: string, k
     quantity: remaining,
     costPerUnit,
     createdAt: earliestPurchasedAt ?? new Date(),
+    marketplace: latestMarketplace,
   };
   if (existing) {
     await tx.collectionItem.update({ where: { id: existing.id }, data });
@@ -90,14 +95,15 @@ export async function addToCollection(
   cardId: string,
   condition: string = "NM",
   costPerUnit?: number,
-  quantity: number = 1
+  quantity: number = 1,
+  marketplace?: string
 ): Promise<void> {
   const session = await verifySession();
   const qty = Number.isFinite(quantity) && quantity >= 1 ? Math.floor(quantity) : 1;
 
   await prisma.$transaction(async (tx) => {
     await tx.purchaseLot.create({
-      data: { userId: session.userId, cardId, condition, costPerUnit, quantity: qty },
+      data: { userId: session.userId, cardId, condition, costPerUnit, quantity: qty, marketplace },
     });
     await recomputePosition(tx, session.userId, { cardId, sealedProductId: null, condition });
   });
@@ -132,14 +138,15 @@ export async function addSealedToCollection(
   sealedProductId: string,
   condition: string = "Mint",
   costPerUnit?: number,
-  quantity: number = 1
+  quantity: number = 1,
+  marketplace?: string
 ): Promise<void> {
   const session = await verifySession();
   const qty = Number.isFinite(quantity) && quantity >= 1 ? Math.floor(quantity) : 1;
 
   await prisma.$transaction(async (tx) => {
     await tx.purchaseLot.create({
-      data: { userId: session.userId, sealedProductId, condition, costPerUnit, quantity: qty },
+      data: { userId: session.userId, sealedProductId, condition, costPerUnit, quantity: qty, marketplace },
     });
     await recomputePosition(tx, session.userId, { cardId: null, sealedProductId, condition });
   });
@@ -175,7 +182,7 @@ export async function getPositionLedgerAction(collectionItemId: string): Promise
 // own recorded sales.
 export async function updatePurchaseLot(
   lotId: string,
-  updates: { quantity?: number; costPerUnit?: number | null; purchasedAt?: string }
+  updates: { quantity?: number; costPerUnit?: number | null; purchasedAt?: string; marketplace?: string | null }
 ): Promise<{ error?: string }> {
   const session = await verifySession();
 
@@ -197,10 +204,11 @@ export async function updatePurchaseLot(
 
       const quantity = updates.quantity != null ? Math.floor(updates.quantity) : lot.quantity;
       const costPerUnit = "costPerUnit" in updates ? updates.costPerUnit : lot.costPerUnit;
+      const marketplace = "marketplace" in updates ? updates.marketplace : lot.marketplace;
 
       await tx.purchaseLot.update({
         where: { id: lot.id },
-        data: { quantity, costPerUnit, purchasedAt: purchasedAt ?? lot.purchasedAt },
+        data: { quantity, costPerUnit, purchasedAt: purchasedAt ?? lot.purchasedAt, marketplace },
       });
       await recomputePosition(tx, session.userId, {
         cardId: lot.cardId,
@@ -230,6 +238,7 @@ export async function updateTransaction(
     feesTotal?: number | null;
     shippingCost?: number | null;
     soldAt?: string;
+    marketplace?: string | null;
   }
 ): Promise<{ error?: string }> {
   const session = await verifySession();
@@ -264,6 +273,7 @@ export async function updateTransaction(
         updates.salePricePerUnit != null ? updates.salePricePerUnit : parseFloat(txn.salePricePerUnit.toString());
       const feesTotal = "feesTotal" in updates ? updates.feesTotal : txn.feesTotal;
       const shippingCost = "shippingCost" in updates ? updates.shippingCost : txn.shippingCost;
+      const marketplace = "marketplace" in updates ? updates.marketplace : txn.marketplace;
       const costPerUnit = txn.costPerUnit != null ? parseFloat(txn.costPerUnit.toString()) : null;
       const feesValue = feesTotal != null ? parseFloat(feesTotal.toString()) : 0;
       const shippingValue = shippingCost != null ? parseFloat(shippingCost.toString()) : 0;
@@ -271,7 +281,7 @@ export async function updateTransaction(
 
       await tx.transaction.update({
         where: { id: txn.id },
-        data: { quantity, salePricePerUnit, feesTotal, shippingCost, profit, soldAt: soldAt ?? txn.soldAt },
+        data: { quantity, salePricePerUnit, feesTotal, shippingCost, profit, soldAt: soldAt ?? txn.soldAt, marketplace },
       });
       await recomputePosition(tx, session.userId, {
         cardId: txn.cardId,
@@ -322,7 +332,8 @@ export async function sellCollectionItem(
   quantitySold: number,
   salePricePerUnit: number,
   feesTotal?: number,
-  shippingCost?: number
+  shippingCost?: number,
+  marketplace?: string
 ): Promise<void> {
   const session = await verifySession();
 
@@ -355,6 +366,7 @@ export async function sellCollectionItem(
         feesTotal: feesTotal ?? null,
         shippingCost: shippingCost ?? null,
         profit,
+        marketplace: marketplace ?? null,
       },
     });
 

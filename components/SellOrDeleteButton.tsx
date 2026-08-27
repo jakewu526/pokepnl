@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { deletePosition, sellCollectionItem } from "@/app/actions/collection";
+import { MARKETPLACES, MARKETPLACE_LABELS, MARKETPLACE_OTHER_MAX_LENGTH, type Marketplace } from "@/lib/marketplace";
 
 // Kept at module scope (not nested in SellOrDeleteButton) so its identity is
 // stable across renders -- a component defined inside another component's
@@ -83,6 +84,8 @@ export function SellOrDeleteButton({
   const [salePrice, setSalePrice] = useState("");
   const [fees, setFees] = useState("");
   const [shipping, setShipping] = useState("");
+  const [marketplace, setMarketplace] = useState<Marketplace>("EBAY");
+  const [otherMarketplace, setOtherMarketplace] = useState("");
 
   useEffect(() => {
     if (!sellOpen && !deleteOpen) return;
@@ -100,6 +103,8 @@ export function SellOrDeleteButton({
     setSalePrice("");
     setFees("");
     setShipping("");
+    setMarketplace("EBAY");
+    setOtherMarketplace("");
     setSellOpen(true);
   }
 
@@ -114,13 +119,18 @@ export function SellOrDeleteButton({
 
   function handleConfirm() {
     if (!Number.isFinite(parsedPrice) || parsedPrice < 0) return;
+    const marketplaceValue =
+      marketplace === "OTHER"
+        ? otherMarketplace.trim().slice(0, MARKETPLACE_OTHER_MAX_LENGTH) || "Other"
+        : MARKETPLACE_LABELS[marketplace];
     startTransition(async () => {
       await sellCollectionItem(
         collectionItemId,
         qty,
         parsedPrice,
         fees.trim() ? feesValue : undefined,
-        shipping.trim() ? shippingValue : undefined
+        shipping.trim() ? shippingValue : undefined,
+        marketplaceValue
       );
       setSellOpen(false);
     });
@@ -228,6 +238,31 @@ export function SellOrDeleteButton({
               )}
             </div>
           </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="font-body text-xs text-ink-muted">Sold on</span>
+            <select
+              value={marketplace}
+              onChange={(e) => setMarketplace(e.target.value as Marketplace)}
+              className="h-9 rounded-full border border-line bg-paper-raised px-3 font-body text-sm text-ink outline-none focus:border-emerald"
+            >
+              {MARKETPLACES.map((code) => (
+                <option key={code} value={code}>
+                  {MARKETPLACE_LABELS[code]}
+                </option>
+              ))}
+            </select>
+          </label>
+          {marketplace === "OTHER" && (
+            <input
+              type="text"
+              placeholder="Where did you sell it?"
+              maxLength={MARKETPLACE_OTHER_MAX_LENGTH}
+              value={otherMarketplace}
+              onChange={(e) => setOtherMarketplace(e.target.value)}
+              className="h-9 rounded-full border border-line bg-paper-raised px-3 font-body text-sm text-ink outline-none focus:border-emerald"
+            />
+          )}
 
           <div className="flex items-center gap-1.5">
             <label className="flex flex-1 flex-col gap-1">

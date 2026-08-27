@@ -92,6 +92,11 @@ model CollectionItem {
   quantity        Int      @default(1)
   costPerUnit     Decimal? @db.Decimal(10, 2)
   createdAt       DateTime @default(now())
+  // Marketplace of the most recent PurchaseLot feeding this position (see
+  // recomputePosition) -- a position can be built from lots bought in
+  // different places, so this is "most recently bought from," not a
+  // guaranteed single source.
+  marketplace     String?
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   card          Card?          @relation(fields: [cardId], references: [id])
@@ -133,6 +138,9 @@ model Transaction {
   shippingCost     Decimal? @db.Decimal(10, 2)
   profit           Decimal? @db.Decimal(10, 2)
   soldAt           DateTime @default(now())
+  // Known marketplace code (see lib/marketplace.ts's MARKETPLACES) or, for
+  // "Other", a freeform string typed by the user.
+  marketplace      String?
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   card          Card?          @relation(fields: [cardId], references: [id], onDelete: SetNull)
@@ -159,6 +167,9 @@ model PurchaseLot {
   quantity        Int
   costPerUnit     Decimal? @db.Decimal(10, 2)
   purchasedAt     DateTime @default(now())
+  // Known marketplace code (see lib/marketplace.ts's MARKETPLACES) or, for
+  // "Other", a freeform string typed by the user.
+  marketplace     String?
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   card          Card?          @relation(fields: [cardId], references: [id], onDelete: SetNull)

@@ -5,6 +5,7 @@ import { AuthNav } from "@/components/AuthNav";
 import { StatTile } from "@/components/StatTile";
 import { PortfolioItemTile } from "@/components/PortfolioItemTile";
 import { PortfolioTableRow } from "@/components/PortfolioTableRow";
+import { AddProductModal } from "@/components/AddProductModal";
 import { CONDITION_LABELS, CONDITION_MULTIPLIERS, type Condition } from "@/lib/condition";
 import { SEALED_TYPE_LABELS, type SealedProductType } from "@/lib/sealed";
 import { getPortfolioData } from "@/lib/portfolio";
@@ -158,7 +159,10 @@ export default async function PortfolioPage({
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
-        <h1 className="mb-4 font-display text-2xl font-semibold tracking-tight text-ink">My Portfolio</h1>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-ink">My Portfolio</h1>
+          <AddProductModal />
+        </div>
 
         {items.length > 0 && (
           <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">

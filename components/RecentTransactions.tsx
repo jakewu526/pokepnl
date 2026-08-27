@@ -5,7 +5,10 @@ import Image from "next/image";
 import { useState, useTransition } from "react";
 import type { TransactionListItem, PurchaseListItem } from "@/lib/pnl";
 import { CONDITION_LABELS, type Condition } from "@/lib/condition";
+import { MARKETPLACES, MARKETPLACE_LABELS, MARKETPLACE_OTHER_MAX_LENGTH } from "@/lib/marketplace";
 import { updatePurchaseLot, updateTransaction } from "@/app/actions/collection";
+
+const MARKETPLACE_LABEL_SET = new Set<string>(Object.values(MARKETPLACE_LABELS));
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -132,6 +135,81 @@ function EditableDateCell({
   );
 }
 
+// Blur-to-save marketplace cell -- same commit pattern as EditableAmountCell/
+// EditableDateCell, but a <select> of known marketplaces plus a freeform
+// "Other" text input. A stored value that isn't one of MARKETPLACE_LABELS
+// (i.e. a past freeform "Other" entry) selects "Other" and shows it in the
+// text field, matching how AddProductModal/SellOrDeleteButton write it.
+function EditableMarketplaceCell({
+  value,
+  onCommit,
+}: {
+  value: string | null;
+  onCommit: (next: string | null) => Promise<{ error?: string }>;
+}) {
+  const isKnown = value != null && MARKETPLACE_LABEL_SET.has(value);
+  const [selectDraft, setSelectDraft] = useState<string>(value == null ? "" : isKnown ? value : "OTHER_LABEL");
+  const [otherDraft, setOtherDraft] = useState(value != null && !isKnown ? value : "");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function reset() {
+    setSelectDraft(value == null ? "" : isKnown ? value : "OTHER_LABEL");
+    setOtherDraft(value != null && !isKnown ? value : "");
+  }
+
+  function commit(nextSelect: string, nextOther: string) {
+    const next = nextSelect === "OTHER_LABEL" ? nextOther.trim() || null : nextSelect || null;
+    if (next === value) return;
+    startTransition(async () => {
+      const result = await onCommit(next);
+      if (result.error) {
+        setError(result.error);
+        reset();
+      } else {
+        setError(null);
+      }
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <select
+        value={selectDraft}
+        onChange={(e) => {
+          const next = e.target.value;
+          setSelectDraft(next);
+          if (next !== "OTHER_LABEL") commit(next, otherDraft);
+        }}
+        disabled={pending}
+        aria-label="Marketplace"
+        className="h-7 w-32 rounded-full border border-line bg-paper px-2 font-data text-xs text-ink outline-none focus:border-emerald disabled:opacity-60"
+      >
+        <option value="">—</option>
+        {MARKETPLACES.map((code) => (
+          <option key={code} value={code === "OTHER" ? "OTHER_LABEL" : MARKETPLACE_LABELS[code]}>
+            {MARKETPLACE_LABELS[code]}
+          </option>
+        ))}
+      </select>
+      {selectDraft === "OTHER_LABEL" && (
+        <input
+          type="text"
+          placeholder="Where?"
+          maxLength={MARKETPLACE_OTHER_MAX_LENGTH}
+          value={otherDraft}
+          onChange={(e) => setOtherDraft(e.target.value)}
+          onBlur={() => commit(selectDraft, otherDraft)}
+          disabled={pending}
+          aria-label="Custom marketplace"
+          className="h-7 w-32 rounded-full border border-line bg-paper px-2 font-data text-xs text-ink outline-none focus:border-emerald disabled:opacity-60"
+        />
+      )}
+      {error && <p className="font-body text-[10px] text-amber">{error}</p>}
+    </div>
+  );
+}
+
 function RowThumb({ imageUrl, name }: { imageUrl: string | null; name: string }) {
   return (
     <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded bg-line/40">
@@ -162,6 +240,7 @@ export function SellTable({
             <th className="px-3 py-2 font-medium">Qty</th>
             <th className="px-3 py-2 font-medium">Cost</th>
             <th className="px-3 py-2 font-medium">Sold for</th>
+            <th className="px-3 py-2 font-medium">Sold on</th>
             <th className="px-3 py-2 font-medium">Net profit</th>
           </tr>
         </thead>
@@ -226,6 +305,16 @@ export function SellTable({
                     priceFormatter.format(tx.salePricePerUnit)
                   )}
                 </td>
+                <td className="px-3 py-2 font-data text-ink-muted">
+                  {editable ? (
+                    <EditableMarketplaceCell
+                      value={tx.marketplace}
+                      onCommit={(next) => updateTransaction(tx.id, { marketplace: next })}
+                    />
+                  ) : (
+                    tx.marketplace ?? "—"
+                  )}
+                </td>
                 <td
                   className={`px-3 py-2 font-data font-medium ${
                     tx.profit == null ? "text-ink-muted" : tx.profit < 0 ? "text-amber" : "text-emerald-strong"
@@ -262,6 +351,7 @@ export function BuyTable({
             <th className="px-3 py-2 font-medium">Item</th>
             <th className="px-3 py-2 font-medium">Qty</th>
             <th className="px-3 py-2 font-medium">Paid</th>
+            <th className="px-3 py-2 font-medium">Bought from</th>
           </tr>
         </thead>
         <tbody>
@@ -324,6 +414,16 @@ export function BuyTable({
                     "—"
                   )}
                 </td>
+                <td className="px-3 py-2 font-data text-ink-muted">
+                  {editable ? (
+                    <EditableMarketplaceCell
+                      value={p.marketplace}
+                      onCommit={(next) => updatePurchaseLot(p.id, { marketplace: next })}
+                    />
+                  ) : (
+                    p.marketplace ?? "—"
+                  )}
+                </td>
               </tr>
             );
           })}
@@ -353,12 +453,14 @@ export function MergedTable({ rows, editable = false }: { rows: MergedRow[]; edi
             <th className="px-3 py-2 font-medium">Item</th>
             <th className="px-3 py-2 font-medium">Qty</th>
             <th className="px-3 py-2 font-medium">Price</th>
+            <th className="px-3 py-2 font-medium">Where</th>
             <th className="px-3 py-2 font-medium">Net profit</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => {
             const item = r.row;
+            const marketplace = r.row.marketplace;
             const itemLabel = (
               <>
                 {item.itemName}
@@ -438,6 +540,20 @@ export function MergedTable({ rows, editable = false }: { rows: MergedRow[]; edi
                     priceFormatter.format(price)
                   ) : (
                     "—"
+                  )}
+                </td>
+                <td className="px-3 py-2 font-data text-ink-muted">
+                  {editable ? (
+                    <EditableMarketplaceCell
+                      value={marketplace}
+                      onCommit={(next) =>
+                        r.kind === "buy"
+                          ? updatePurchaseLot(item.id, { marketplace: next })
+                          : updateTransaction(item.id, { marketplace: next })
+                      }
+                    />
+                  ) : (
+                    marketplace ?? "—"
                   )}
                 </td>
                 <td

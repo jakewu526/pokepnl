@@ -119,6 +119,7 @@ export type TransactionListItem = {
   shippingCost: number | null;
   profit: number | null;
   soldAt: string;
+  marketplace: string | null;
   itemType: "card" | "sealed";
   itemId: string | null;
   imageUrl: string | null;
@@ -151,6 +152,7 @@ export async function getTransactionHistory(
     shippingCost: row.shippingCost != null ? parseFloat(row.shippingCost.toString()) : null,
     profit: row.profit != null ? parseFloat(row.profit.toString()) : null,
     soldAt: row.soldAt.toISOString().slice(0, 10),
+    marketplace: row.marketplace,
     // The card/sealed FKs are onDelete: SetNull, so a deleted item leaves
     // itemName populated but both relations null -- itemId/imageUrl fall
     // back to null rather than pointing at a row that no longer exists.
@@ -171,6 +173,7 @@ export type PurchaseListItem = {
   quantity: number;
   costPerUnit: number | null;
   purchasedAt: string;
+  marketplace: string | null;
   itemType: "card" | "sealed";
   itemId: string | null;
   imageUrl: string | null;
@@ -198,6 +201,12 @@ export async function getPurchaseHistory(userId: string, limit?: number, skip?: 
     quantity: row.quantity,
     costPerUnit: row.costPerUnit != null ? parseFloat(row.costPerUnit.toString()) : null,
     purchasedAt: row.createdAt.toISOString().slice(0, 10),
+    // CollectionItem's marketplace is the most recent PurchaseLot's (kept in
+    // sync by recomputePosition) -- a merged position can be built from lots
+    // bought in different places, so this is "most recently bought from,"
+    // not a guaranteed single source. See getAllPurchaseLots/
+    // getPositionLedger for the full per-event PurchaseLot marketplace.
+    marketplace: row.marketplace,
     itemType: row.cardId ? "card" : "sealed",
     itemId: row.cardId ?? row.sealedProductId ?? null,
     imageUrl: row.card?.imageUrl ?? row.sealedProduct?.imageUrl ?? null,
@@ -216,6 +225,7 @@ type PurchaseLotRow = {
   quantity: number;
   costPerUnit: { toString(): string } | null;
   purchasedAt: Date;
+  marketplace: string | null;
   card: { name: string; imageUrl: string | null } | null;
   sealedProduct: { name: string; imageUrl: string | null } | null;
 };
@@ -228,6 +238,7 @@ function mapPurchaseLotRow(row: PurchaseLotRow): PurchaseListItem {
     quantity: row.quantity,
     costPerUnit: row.costPerUnit != null ? parseFloat(row.costPerUnit.toString()) : null,
     purchasedAt: row.purchasedAt.toISOString().slice(0, 10),
+    marketplace: row.marketplace,
     itemType: row.cardId ? "card" : "sealed",
     itemId: row.cardId ?? row.sealedProductId ?? null,
     imageUrl: row.card?.imageUrl ?? row.sealedProduct?.imageUrl ?? null,
@@ -307,6 +318,7 @@ export async function getPositionLedger(
     shippingCost: row.shippingCost != null ? parseFloat(row.shippingCost.toString()) : null,
     profit: row.profit != null ? parseFloat(row.profit.toString()) : null,
     soldAt: row.soldAt.toISOString().slice(0, 10),
+    marketplace: row.marketplace,
     itemType: row.cardId ? "card" : "sealed",
     itemId: row.cardId ?? row.sealedProductId ?? null,
     imageUrl: row.card?.imageUrl ?? row.sealedProduct?.imageUrl ?? null,
