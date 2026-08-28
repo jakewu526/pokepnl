@@ -226,6 +226,8 @@ export default async function DashboardPage() {
                     const cost = item.costPerUnit != null ? parseFloat(item.costPerUnit.toString()) : null;
                     const unrealized =
                       cost != null && marketPrice != null ? (marketPrice - cost) * item.quantity : null;
+                    const unrealizedPct =
+                      cost != null && cost !== 0 && marketPrice != null ? (marketPrice - cost) / cost : null;
 
                     return item.card ? (
                       <PortfolioItemTile
@@ -239,6 +241,7 @@ export default async function DashboardPage() {
                         quantity={item.quantity}
                         cost={cost}
                         unrealized={unrealized}
+                        unrealizedPct={unrealizedPct}
                         collectionItemId={item.id}
                         marketPrice={marketPrice}
                       />
@@ -258,6 +261,7 @@ export default async function DashboardPage() {
                         quantity={item.quantity}
                         cost={cost}
                         unrealized={unrealized}
+                        unrealizedPct={unrealizedPct}
                         collectionItemId={item.id}
                         marketPrice={marketPrice}
                       />

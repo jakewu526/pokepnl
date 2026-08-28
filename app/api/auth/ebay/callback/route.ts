@@ -8,6 +8,21 @@ function settingsError(request: NextRequest, reason: string): NextResponse {
   return NextResponse.redirect(new URL(`/settings?ebayError=${reason}`, request.url));
 }
 
+// eBay's account-deletion notifications (app/api/ebay/account-deletion/route.ts)
+// key on the seller's immutable eBay userId, not anything OAuth itself hands
+// back -- so without this lookup there'd be no way to match a real deletion
+// notification to a stored EbayAccount row. Requires the
+// commerce.identity.readonly scope (see lib/ebay-oauth.ts).
+async function fetchEbayUserId(accessToken: string): Promise<string | null> {
+  const res = await fetch("https://apiz.ebay.com/commerce/identity/v1/user/", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return null;
+
+  const json = (await res.json()) as { userId?: string };
+  return json.userId ?? null;
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const session = await verifySession();
 
@@ -41,17 +56,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const refreshTokenExpiresAt = new Date(
     Date.now() + (Number.isFinite(refreshTokenExpiresInSeconds) ? refreshTokenExpiresInSeconds : 0) * 1000
   );
+  const ebayUserId = await fetchEbayUserId(tokens.accessToken());
 
   await prisma.ebayAccount.upsert({
     where: { userId: session.userId },
     create: {
       userId: session.userId,
+      ebayUserId,
       accessToken: tokens.accessToken(),
       accessTokenExpiresAt: tokens.accessTokenExpiresAt(),
       refreshToken: tokens.refreshToken(),
       refreshTokenExpiresAt,
     },
     update: {
+      ebayUserId,
       accessToken: tokens.accessToken(),
       accessTokenExpiresAt: tokens.accessTokenExpiresAt(),
       refreshToken: tokens.refreshToken(),

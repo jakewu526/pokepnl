@@ -18,6 +18,12 @@ export const EBAY_TOKEN_ENDPOINT = "https://api.ebay.com/identity/v1/oauth2/toke
 export const EBAY_ORDER_SCOPES = [
   "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
   "https://api.ebay.com/oauth/api_scope/sell.finances.readonly",
+  // Needed to resolve the connecting seller's immutable eBay userId (via the
+  // Commerce Identity API, see fetchEbayUserId in the OAuth callback route) --
+  // that's the id eBay's account-deletion notifications key on (see
+  // app/api/ebay/account-deletion/route.ts), so without it we'd have no way
+  // to know whose EbayAccount row a real deletion notification refers to.
+  "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
 ];
 
 export function getEbayOAuthClient(): OAuth2Client {
