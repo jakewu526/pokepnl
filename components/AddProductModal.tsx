@@ -4,12 +4,6 @@ import Image from "next/image";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { addToCollection, addSealedToCollection } from "@/app/actions/collection";
 import { CONDITIONS, CONDITION_LABELS, type Condition } from "@/lib/condition";
-import {
-  SEALED_CONDITIONS,
-  SEALED_CONDITION_LABELS,
-  SEALED_CONDITION_OTHER_MAX_LENGTH,
-  type SealedCondition,
-} from "@/lib/sealed-condition";
 import { MARKETPLACES, MARKETPLACE_LABELS, MARKETPLACE_OTHER_MAX_LENGTH, type Marketplace } from "@/lib/marketplace";
 import type { CardSuggestion } from "@/lib/cards";
 import { SEALED_TYPE_LABELS, type SealedProductSuggestion } from "@/lib/sealed-types";
@@ -50,8 +44,6 @@ export function AddProductModal() {
   const [marketPrice, setMarketPrice] = useState<number | null>(null);
   const [quantity, setQuantity] = useState("1");
   const [cardCondition, setCardCondition] = useState<Condition>("NM");
-  const [sealedCondition, setSealedCondition] = useState<SealedCondition>("MINT");
-  const [otherDescription, setOtherDescription] = useState("");
   const [marketplace, setMarketplace] = useState<Marketplace>("POKEMON_CENTER");
   const [otherMarketplace, setOtherMarketplace] = useState("");
 
@@ -133,8 +125,6 @@ export function AddProductModal() {
     setMarketPrice(null);
     setQuantity("1");
     setCardCondition("NM");
-    setSealedCondition("MINT");
-    setOtherDescription("");
     setMarketplace("POKEMON_CENTER");
     setOtherMarketplace("");
   }
@@ -165,11 +155,7 @@ export function AddProductModal() {
       if (isCardSuggestion(selected)) {
         await addToCollection(selected.id, cardCondition, costPerUnit, qty, marketplaceValue);
       } else {
-        const conditionValue =
-          sealedCondition === "OTHER"
-            ? otherDescription.trim().slice(0, SEALED_CONDITION_OTHER_MAX_LENGTH) || "Other"
-            : SEALED_CONDITION_LABELS[sealedCondition];
-        await addSealedToCollection(selected.id, conditionValue, costPerUnit, qty, marketplaceValue);
+        await addSealedToCollection(selected.id, costPerUnit, qty, marketplaceValue);
       }
       close();
     });
@@ -342,46 +328,23 @@ export function AddProductModal() {
                   )}
                 </div>
 
-                <label htmlFor="add-product-condition" className="font-body text-xs font-medium text-ink-muted">
-                  Condition
-                </label>
-                {isCardSuggestion(selected) ? (
-                  <select
-                    id="add-product-condition"
-                    value={cardCondition}
-                    onChange={(e) => setCardCondition(e.target.value as Condition)}
-                    className="h-10 rounded-full border border-line bg-paper-raised px-3 font-body text-sm text-ink outline-none focus:border-emerald"
-                  >
-                    {CONDITIONS.map((code) => (
-                      <option key={code} value={code}>
-                        {CONDITION_LABELS[code]}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
+                {isCardSuggestion(selected) && (
                   <>
+                    <label htmlFor="add-product-condition" className="font-body text-xs font-medium text-ink-muted">
+                      Condition
+                    </label>
                     <select
                       id="add-product-condition"
-                      value={sealedCondition}
-                      onChange={(e) => setSealedCondition(e.target.value as SealedCondition)}
+                      value={cardCondition}
+                      onChange={(e) => setCardCondition(e.target.value as Condition)}
                       className="h-10 rounded-full border border-line bg-paper-raised px-3 font-body text-sm text-ink outline-none focus:border-emerald"
                     >
-                      {SEALED_CONDITIONS.map((code) => (
+                      {CONDITIONS.map((code) => (
                         <option key={code} value={code}>
-                          {SEALED_CONDITION_LABELS[code]}
+                          {CONDITION_LABELS[code]}
                         </option>
                       ))}
                     </select>
-                    {sealedCondition === "OTHER" && (
-                      <input
-                        type="text"
-                        placeholder="Describe the condition"
-                        maxLength={SEALED_CONDITION_OTHER_MAX_LENGTH}
-                        value={otherDescription}
-                        onChange={(e) => setOtherDescription(e.target.value)}
-                        className="h-10 rounded-full border border-line bg-paper-raised px-3 font-body text-sm text-ink outline-none focus:border-emerald"
-                      />
-                    )}
                   </>
                 )}
 

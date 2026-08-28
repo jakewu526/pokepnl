@@ -5,7 +5,7 @@ import { decrypt } from "@/lib/session";
 // pages call verifySession(), whose redirect() only reaches the browser as a
 // 1-second `<meta http-equiv="refresh">` once streaming has started -- which
 // shows up as a blank white page before the login form appears.
-const protectedRoutes = ["/dashboard", "/portfolio", "/transactions", "/watchlist", "/welcome"];
+const protectedRoutes = ["/dashboard", "/portfolio", "/transactions", "/watchlist", "/welcome", "/settings"];
 const authRoutes = ["/login", "/signup"];
 const dashboardRedirectRoutes = ["/"];
 // Only the landing page marks the visitor as "already landed" -- reaching the

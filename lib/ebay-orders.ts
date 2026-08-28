@@ -12,10 +12,13 @@ const POKEMON_CATEGORY_IDS = new Set(["183454", "183456"]);
 const POKEMON_TITLE_PATTERN = /pok[eé]mon|\bptcg\b|\betb\b|booster\s*(box|pack)/i;
 
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
-// Safety stop for the very first ("all available history") backfill so a
-// misbehaving API can't walk backward forever -- eBay doesn't retain seller
-// order data anywhere near this far back in practice.
-const BACKFILL_CAP_MS = 6 * 365 * 24 * 60 * 60 * 1000;
+// eBay's Fulfillment API hard-rejects any `creationdate` filter whose start
+// date is more than 2 years back (confirmed live: errorId 30830, "Start date
+// must be within '2' years from present date") -- this is not just a safety
+// stop, it's the actual ceiling eBay enforces. A day of slack keeps the last
+// window comfortably inside the boundary despite the walk landing on
+// slightly different instants than eBay's own "present date" each request.
+const BACKFILL_CAP_MS = 2 * 365 * 24 * 60 * 60 * 1000 - 24 * 60 * 60 * 1000;
 
 export type NormalizedOrderLineItem = {
   orderId: string;
@@ -81,6 +84,34 @@ type EbayOrderApiResponse = {
   next?: string;
 };
 
+// eBay rejects any creationdate filter whose start/end appears to be "in the
+// future" -- validated against eBay's own clock, not ours. That's a real
+// failure mode on a machine whose system clock has drifted (or, as hit
+// during development, is deliberately set to a simulated date), since
+// `Date.now()` then reads later than eBay's actual present moment. Every
+// HTTP response carries a standard `Date` header (RFC 9110 §6.6.1), so this
+// calibrates a one-time offset from that rather than trusting the local
+// clock for anything sent to eBay. Cached for the process lifetime -- clock
+// drift doesn't change fast enough to need re-checking per request.
+let cachedClockSkewMs: number | null = null;
+
+async function getEbayNow(accessToken: string): Promise<Date> {
+  if (cachedClockSkewMs != null) {
+    return new Date(Date.now() + cachedClockSkewMs);
+  }
+
+  // Filter-less request purely to read a trustworthy `Date` response header
+  // -- can't hit the future-date validation since it sends no date filter.
+  const res = await fetch(`${FULFILLMENT_API_BASE}/order?limit=1`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const dateHeader = res.headers.get("date");
+  const serverNowMs = dateHeader ? new Date(dateHeader).getTime() : NaN;
+
+  cachedClockSkewMs = Number.isFinite(serverNowMs) ? serverNowMs - Date.now() : 0;
+  return new Date(Date.now() + cachedClockSkewMs);
+}
+
 async function fetchOrdersWindow(
   accessToken: string,
   fromIso: string,
@@ -100,7 +131,8 @@ async function fetchOrdersWindow(
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) {
-      throw new Error(`eBay getOrders failed: ${res.status} ${res.statusText}`);
+      const body = await res.text().catch(() => "");
+      throw new Error(`eBay getOrders failed: ${res.status} ${res.statusText} -- ${body}`);
     }
 
     const json = (await res.json()) as EbayOrderApiResponse;
@@ -138,14 +170,15 @@ async function fetchOrdersWindow(
 //   empty window (their order retention has ended) or BACKFILL_CAP_MS is hit.
 export async function fetchSoldOrders(userId: string, sinceIso?: string): Promise<NormalizedOrderLineItem[]> {
   const accessToken = await getValidAccessToken(userId);
+  const ebayNowMs = (await getEbayNow(accessToken)).getTime();
 
   if (sinceIso) {
-    return fetchOrdersWindow(accessToken, sinceIso, new Date().toISOString());
+    return fetchOrdersWindow(accessToken, sinceIso, new Date(ebayNowMs).toISOString());
   }
 
   const all: NormalizedOrderLineItem[] = [];
-  let windowEnd = Date.now();
-  const backfillFloor = Date.now() - BACKFILL_CAP_MS;
+  let windowEnd = ebayNowMs;
+  const backfillFloor = ebayNowMs - BACKFILL_CAP_MS;
 
   while (windowEnd > backfillFloor) {
     const windowStart = Math.max(windowEnd - NINETY_DAYS_MS, backfillFloor);

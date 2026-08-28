@@ -80,6 +80,8 @@ export function EbayConnectionCard({
               Imported {result.imported} new sale{result.imported === 1 ? "" : "s"}
               {result.skippedDuplicate > 0 && ` · ${result.skippedDuplicate} already imported`}
               {result.skippedNonPokemon > 0 && ` · ${result.skippedNonPokemon} skipped (not Pokemon-related)`}
+              {result.positionMismatch > 0 &&
+                ` · ${result.positionMismatch} sold more than recorded as bought (portfolio quantity not updated for those)`}
             </p>
           )}
         </div>

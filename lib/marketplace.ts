@@ -1,5 +1,5 @@
-// Where an item was bought or sold. Same fixed-list-plus-freeform-"Other"
-// pattern as lib/sealed-condition.ts.
+// Where an item was bought or sold. Fixed list plus a freeform "Other" entry
+// (see marketplaceLabel below) for anything not worth a dedicated code.
 export const MARKETPLACES = [
   "POKEMON_CENTER",
   "AMAZON",
