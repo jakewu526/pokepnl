@@ -24,12 +24,26 @@ export function EbayConnectionCard({
 }) {
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<EbaySyncResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   function handleSync() {
     setResult(null);
+    setError(null);
     startTransition(async () => {
-      const syncResult = await syncEbayOrders();
-      setResult(syncResult);
+      try {
+        const syncResult = await syncEbayOrders();
+        setResult(syncResult);
+      } catch {
+        // Failures here are usually a transient DB blip on the sync's Prisma
+        // calls, not a real problem with the eBay connection -- one silent
+        // retry clears most of them before bothering the user with an error.
+        try {
+          const syncResult = await syncEbayOrders();
+          setResult(syncResult);
+        } catch {
+          setError("Couldn't sync with eBay. Please try again.");
+        }
+      }
     });
   }
 
@@ -75,6 +89,7 @@ export function EbayConnectionCard({
             </button>
           </div>
 
+          {error && <p className="font-body text-sm text-amber">{error}</p>}
           {result && (
             <p className="font-body text-sm text-ink-muted">
               Imported {result.imported} new sale{result.imported === 1 ? "" : "s"}

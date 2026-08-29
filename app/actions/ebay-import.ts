@@ -87,14 +87,26 @@ export async function syncEbayOrders(): Promise<EbaySyncResult> {
     // than fabricating a phantom position or throwing on a negative balance.
     let condition: string | null = null;
     let existingPosition = false;
+    let costPerUnit: number | null = null;
     if (match) {
       const where = match.kind === "card" ? { cardId: match.cardId } : { sealedProductId: match.sealedProductId };
       const position = await prisma.collectionItem.findFirst({ where: { userId: session.userId, ...where } });
       if (position) {
         condition = position.condition;
         existingPosition = true;
+        costPerUnit = position.costPerUnit != null ? parseFloat(position.costPerUnit.toString()) : null;
       }
     }
+
+    // Same profit formula as sellCollectionItem (app/actions/collection.ts):
+    // cost basis is the position's weighted-average cost at sale time, fees
+    // and shipping are per-sale totals rather than per-unit.
+    const profit =
+      costPerUnit != null
+        ? (item.salePricePerUnit - costPerUnit) * item.quantity -
+          (feesByOrderId.get(item.orderId) ?? 0) -
+          (item.shippingCost ?? 0)
+        : null;
 
     // The sale itself is always recorded, even if the position recompute
     // below fails -- a bad recompute (e.g. this sale would outnumber what's
@@ -109,9 +121,11 @@ export async function syncEbayOrders(): Promise<EbaySyncResult> {
         itemName,
         condition,
         quantity: item.quantity,
+        costPerUnit,
         salePricePerUnit: item.salePricePerUnit,
         shippingCost: item.shippingCost,
         feesTotal: feesByOrderId.get(item.orderId) ?? null,
+        profit,
         soldAt: item.soldAt,
         marketplace: MARKETPLACE_LABELS.EBAY,
         externalId,

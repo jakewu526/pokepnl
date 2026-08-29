@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { verifySession } from "@/lib/dal";
+import { prisma } from "@/lib/prisma";
 import { AuthNav } from "@/components/AuthNav";
 import { TransactionSearchBar } from "@/components/TransactionSearchBar";
+import { EbaySyncButton } from "@/components/EbaySyncButton";
 import { BuyTable, SellTable, MergedTable, type MergedRow } from "@/components/RecentTransactions";
 import {
   getAllPurchaseLots,
@@ -116,9 +118,10 @@ export default async function TransactionsPage({
   const sellPage = Math.max(1, parseInt(params.sellPage ?? "1", 10) || 1);
   const mergedPage = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
 
-  const [purchaseCount, saleCount] = await Promise.all([
+  const [purchaseCount, saleCount, ebayAccount] = await Promise.all([
     getPurchaseLotCount(session.userId),
     getTransactionCount(session.userId),
+    prisma.ebayAccount.findUnique({ where: { userId: session.userId } }),
   ]);
   const hasAny = purchaseCount > 0 || saleCount > 0;
 
@@ -141,25 +144,28 @@ export default async function TransactionsPage({
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h1 className="font-display text-2xl font-semibold tracking-tight text-ink">My Transactions</h1>
-          {hasAny && (
-            <div className="flex flex-wrap items-center gap-3">
-              <TransactionSearchBar initialQuery={q} />
-              <div role="group" className="flex items-center gap-1 rounded-full border border-line bg-paper-raised p-1">
-                {VIEW_OPTIONS.map((opt) => (
-                  <Link
-                    key={opt.key}
-                    href={viewHref(q, opt.key)}
-                    aria-pressed={view === opt.key}
-                    className={`rounded-full px-3 py-1.5 font-body text-sm font-medium transition ${
-                      view === opt.key ? "bg-emerald text-paper-raised" : "text-ink-muted hover:text-ink"
-                    }`}
-                  >
-                    {opt.label}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-3">
+            {hasAny && (
+              <>
+                <TransactionSearchBar initialQuery={q} />
+                <div role="group" className="flex items-center gap-1 rounded-full border border-line bg-paper-raised p-1">
+                  {VIEW_OPTIONS.map((opt) => (
+                    <Link
+                      key={opt.key}
+                      href={viewHref(q, opt.key)}
+                      aria-pressed={view === opt.key}
+                      className={`rounded-full px-3 py-1.5 font-body text-sm font-medium transition ${
+                        view === opt.key ? "bg-emerald text-paper-raised" : "text-ink-muted hover:text-ink"
+                      }`}
+                    >
+                      {opt.label}
+                    </Link>
+                  ))}
+                </div>
+              </>
+            )}
+            <EbaySyncButton ebayUserId={ebayAccount?.ebayUserId ?? null} />
+          </div>
         </div>
 
         {!hasAny ? (
