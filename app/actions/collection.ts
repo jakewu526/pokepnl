@@ -100,6 +100,19 @@ export async function getPositionLedgerAction(collectionItemId: string): Promise
   });
 }
 
+// Same drill-down as getPositionLedgerAction, but for a closed position --
+// those have no CollectionItem to key off (see getClosedPositions in
+// lib/pnl.ts), so the caller passes the card/sealedProductId/condition key
+// directly instead of a collectionItemId.
+export async function getClosedPositionLedgerAction(
+  cardId: string | null,
+  sealedProductId: string | null,
+  condition: string | null
+): Promise<PositionLedger> {
+  const session = await verifySession();
+  return getPositionLedger(session.userId, { cardId, sealedProductId, condition });
+}
+
 // Fix a wrong price/quantity on a past buy. Recomputes the owning position
 // inside the same transaction so CollectionItem never drifts from its ledger;
 // rejected (without writing anything) if it would undersell the position's

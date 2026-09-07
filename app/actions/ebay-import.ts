@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { verifySession } from "@/lib/dal";
-import { fetchOrderFees, fetchSoldOrders, isPokemonRelated } from "@/lib/ebay-orders";
+import { estimateOrderFee, fetchSoldOrders, isPokemonRelated } from "@/lib/ebay-orders";
 import { matchEbayListingToProduct } from "@/lib/ebay-product-match";
 import { recomputePosition } from "@/lib/position";
 import { MARKETPLACE_LABELS } from "@/lib/marketplace";
@@ -48,14 +48,6 @@ export async function syncEbayOrders(): Promise<EbaySyncResult> {
   const pokemonItems = allItems.filter(isPokemonRelated);
   const skippedNonPokemon = allItems.length - pokemonItems.length;
 
-  // One fee lookup per distinct order, reused across that order's line items.
-  const feesByOrderId = new Map<string, number | null>();
-  for (const item of pokemonItems) {
-    if (!feesByOrderId.has(item.orderId)) {
-      feesByOrderId.set(item.orderId, await fetchOrderFees(session.userId, item.orderId));
-    }
-  }
-
   let imported = 0;
   let skippedDuplicate = 0;
   let positionMismatch = 0;
@@ -98,14 +90,16 @@ export async function syncEbayOrders(): Promise<EbaySyncResult> {
       }
     }
 
+    // Real per-order eBay fees aren't available yet (see estimateOrderFee in
+    // lib/ebay-orders.ts) -- flat-rate estimate for now.
+    const feesTotal = estimateOrderFee(item.salePricePerUnit, item.quantity);
+
     // Same profit formula as sellCollectionItem (app/actions/collection.ts):
     // cost basis is the position's weighted-average cost at sale time, fees
     // and shipping are per-sale totals rather than per-unit.
     const profit =
       costPerUnit != null
-        ? (item.salePricePerUnit - costPerUnit) * item.quantity -
-          (feesByOrderId.get(item.orderId) ?? 0) -
-          (item.shippingCost ?? 0)
+        ? (item.salePricePerUnit - costPerUnit) * item.quantity - feesTotal - (item.shippingCost ?? 0)
         : null;
 
     // The sale itself is always recorded, even if the position recompute
@@ -124,7 +118,7 @@ export async function syncEbayOrders(): Promise<EbaySyncResult> {
         costPerUnit,
         salePricePerUnit: item.salePricePerUnit,
         shippingCost: item.shippingCost,
-        feesTotal: feesByOrderId.get(item.orderId) ?? null,
+        feesTotal,
         profit,
         soldAt: item.soldAt,
         marketplace: MARKETPLACE_LABELS.EBAY,

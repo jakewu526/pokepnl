@@ -267,6 +267,165 @@ export async function getPurchaseLotCount(userId: string): Promise<number> {
   return prisma.purchaseLot.count({ where: { userId } });
 }
 
+export type ClosedPosition = {
+  cardId: string | null;
+  sealedProductId: string | null;
+  condition: string | null;
+  itemName: string;
+  setName: string | null;
+  imageUrl: string | null;
+  itemType: "card" | "sealed";
+  quantity: number;
+  avgCostPerUnit: number | null;
+  avgSalePricePerUnit: number;
+  totalProfit: number | null;
+  lastSoldAt: string;
+};
+
+function closedPositionKey(cardId: string | null, sealedProductId: string | null, condition: string | null): string {
+  return `${cardId ?? `s:${sealedProductId}`}|${condition ?? ""}`;
+}
+
+type ClosedPositionAgg = {
+  cardId: string | null;
+  sealedProductId: string | null;
+  condition: string | null;
+  itemName: string;
+  setName: string | null;
+  imageUrl: string | null;
+  boughtQty: number;
+  costSum: number;
+  costKnownQty: number;
+  soldQty: number;
+  saleSum: number;
+  feesSum: number;
+  shippingSum: number;
+  lastSoldAt: string;
+};
+
+// Positions that were fully bought and fully sold back out -- these have no
+// CollectionItem (recomputePosition deletes it once remaining hits 0), so
+// they're rebuilt here straight from the PurchaseLot/Transaction ledger
+// rather than read off CollectionItem like every other portfolio view.
+// Reopening the same (cardId|sealedProductId, condition) with a new buy
+// folds its old purchases/sales back into that position's blended history,
+// same as recomputePosition does, so a currently-open position never shows
+// up here even if it was closed out at some point in the past.
+export async function getClosedPositions(userId: string): Promise<ClosedPosition[]> {
+  const [lots, sales] = await Promise.all([
+    prisma.purchaseLot.findMany({
+      where: { userId },
+      select: { cardId: true, sealedProductId: true, condition: true, quantity: true, costPerUnit: true },
+    }),
+    prisma.transaction.findMany({
+      where: { userId },
+      select: {
+        cardId: true,
+        sealedProductId: true,
+        condition: true,
+        quantity: true,
+        salePricePerUnit: true,
+        feesTotal: true,
+        shippingCost: true,
+        soldAt: true,
+        itemName: true,
+        card: { select: { imageUrl: true, set: { select: { name: true } } } },
+        sealedProduct: { select: { imageUrl: true, set: { select: { name: true } } } },
+      },
+    }),
+  ]);
+
+  const map = new Map<string, ClosedPositionAgg>();
+
+  function getAgg(cardId: string | null, sealedProductId: string | null, condition: string | null, itemName: string, imageUrl: string | null): ClosedPositionAgg {
+    const k = closedPositionKey(cardId, sealedProductId, condition);
+    let agg = map.get(k);
+    if (!agg) {
+      agg = {
+        cardId,
+        sealedProductId,
+        condition,
+        itemName,
+        setName: null,
+        imageUrl,
+        boughtQty: 0,
+        costSum: 0,
+        costKnownQty: 0,
+        soldQty: 0,
+        saleSum: 0,
+        feesSum: 0,
+        shippingSum: 0,
+        lastSoldAt: "",
+      };
+      map.set(k, agg);
+    }
+    return agg;
+  }
+
+  for (const lot of lots) {
+    // itemName/imageUrl/setName get filled in from the sale rows below
+    // (PurchaseLot has no itemName column) -- placeholder here in case a key
+    // only ever appears in lots, which can't happen for a closed position
+    // anyway.
+    const agg = getAgg(lot.cardId, lot.sealedProductId, lot.condition, "", null);
+    agg.boughtQty += lot.quantity;
+    if (lot.costPerUnit != null) {
+      agg.costSum += parseFloat(lot.costPerUnit.toString()) * lot.quantity;
+      agg.costKnownQty += lot.quantity;
+    }
+  }
+
+  for (const t of sales) {
+    const imageUrl = t.card?.imageUrl ?? t.sealedProduct?.imageUrl ?? null;
+    const setName = t.card?.set?.name ?? t.sealedProduct?.set?.name ?? null;
+    const agg = getAgg(t.cardId, t.sealedProductId, t.condition, t.itemName, imageUrl);
+    agg.itemName = t.itemName;
+    agg.setName = setName;
+    if (imageUrl) agg.imageUrl = imageUrl;
+    agg.soldQty += t.quantity;
+    agg.saleSum += parseFloat(t.salePricePerUnit.toString()) * t.quantity;
+    if (t.feesTotal != null) agg.feesSum += parseFloat(t.feesTotal.toString());
+    if (t.shippingCost != null) agg.shippingSum += parseFloat(t.shippingCost.toString());
+    const soldAtKey = t.soldAt.toISOString().slice(0, 10);
+    if (soldAtKey > agg.lastSoldAt) agg.lastSoldAt = soldAtKey;
+  }
+
+  const closed: ClosedPosition[] = [];
+  for (const agg of map.values()) {
+    if (agg.soldQty === 0) continue;
+    const remaining = agg.boughtQty - agg.soldQty;
+    if (remaining !== 0) continue;
+    const avgCostPerUnit = agg.costKnownQty > 0 ? agg.costSum / agg.costKnownQty : null;
+    // Recomputed from the position's *current* blended cost basis rather than
+    // trusting each Transaction's stored `profit` -- that field is frozen at
+    // whatever cost basis was known the moment the sale happened, and a
+    // PurchaseLot added afterward (e.g. backfilling a pre-tracker buy) folds
+    // into the position's cost via recomputePosition without ever touching
+    // past Transaction rows, leaving a real, known cost basis paired with a
+    // stale null profit. This mirrors getPnlSummary's unrealizedProfit, which
+    // likewise always derives from current cost rather than a stored figure.
+    const totalProfit =
+      avgCostPerUnit != null ? agg.saleSum - avgCostPerUnit * agg.soldQty - agg.feesSum - agg.shippingSum : null;
+    closed.push({
+      cardId: agg.cardId,
+      sealedProductId: agg.sealedProductId,
+      condition: agg.condition,
+      itemName: agg.itemName,
+      setName: agg.setName,
+      imageUrl: agg.imageUrl,
+      itemType: agg.cardId ? "card" : "sealed",
+      quantity: agg.soldQty,
+      avgCostPerUnit,
+      avgSalePricePerUnit: agg.saleSum / agg.soldQty,
+      totalProfit,
+      lastSoldAt: agg.lastSoldAt,
+    });
+  }
+
+  closed.sort((a, b) => (a.lastSoldAt < b.lastSoldAt ? 1 : a.lastSoldAt > b.lastSoldAt ? -1 : 0));
+  return closed;
+}
+
 export type PositionLedger = {
   purchases: PurchaseListItem[];
   sales: TransactionListItem[];

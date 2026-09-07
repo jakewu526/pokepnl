@@ -6,6 +6,7 @@ export const MARKETPLACES = [
   "BARNES_AND_NOBLE",
   "WALMART",
   "TARGET",
+  "COSTCO",
   "EBAY",
   "OTHER",
 ] as const;
@@ -17,6 +18,7 @@ export const MARKETPLACE_LABELS: Record<Marketplace, string> = {
   BARNES_AND_NOBLE: "Barnes and Noble",
   WALMART: "Walmart",
   TARGET: "Target",
+  COSTCO: "Costco",
   EBAY: "eBay",
   OTHER: "Other",
 };

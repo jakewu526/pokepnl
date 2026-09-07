@@ -1,19 +1,25 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { getPositionLedgerAction } from "@/app/actions/collection";
+import { getPositionLedgerAction, getClosedPositionLedgerAction } from "@/app/actions/collection";
 import type { PositionLedger } from "@/lib/pnl";
 import { BuyTable, SellTable } from "@/components/RecentTransactions";
 
 // Position-scoped counterpart to DayActivityModal -- same fixed-inset dialog
-// shell and the same BuyTable/SellTable, just keyed on a collectionItemId
-// instead of a date. Opened from PortfolioTableRow's "History" button.
+// shell and the same BuyTable/SellTable, just keyed on a collectionItemId (or,
+// for a closed position with no CollectionItem, its card/sealedProductId/
+// condition key) instead of a date. Opened from PortfolioTableRow's "History"
+// button.
+export type PositionActivityKey =
+  | { collectionItemId: string }
+  | { cardId: string | null; sealedProductId: string | null; condition: string | null };
+
 export function PositionActivityModal({
-  collectionItemId,
+  positionKey,
   itemName,
   onClose,
 }: {
-  collectionItemId: string | null;
+  positionKey: PositionActivityKey | null;
   itemName: string;
   onClose: () => void;
 }) {
@@ -21,27 +27,30 @@ export function PositionActivityModal({
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
-    if (!collectionItemId) {
+    if (!positionKey) {
       setLedger(null);
       return;
     }
     setLedger(null);
     startTransition(async () => {
-      const result = await getPositionLedgerAction(collectionItemId);
+      const result =
+        "collectionItemId" in positionKey
+          ? await getPositionLedgerAction(positionKey.collectionItemId)
+          : await getClosedPositionLedgerAction(positionKey.cardId, positionKey.sealedProductId, positionKey.condition);
       setLedger(result);
     });
-  }, [collectionItemId]);
+  }, [positionKey]);
 
   useEffect(() => {
-    if (!collectionItemId) return;
+    if (!positionKey) return;
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [collectionItemId, onClose]);
+  }, [positionKey, onClose]);
 
-  if (!collectionItemId) return null;
+  if (!positionKey) return null;
 
   const hasContent = ledger && (ledger.purchases.length > 0 || ledger.sales.length > 0);
 
