@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { EBAY_ORDER_SCOPES, EBAY_TOKEN_ENDPOINT, getEbayOAuthClient } from "@/lib/ebay-oauth";
 
 const FULFILLMENT_API_BASE = "https://api.ebay.com/sell/fulfillment/v1";
-const FINANCES_API_BASE = "https://apiz.ebay.com/sell/finances/v1";
 
 // eBay's own Pokemon TCG categories (same ones lib/ebay.ts already searches
 // under for price lookups) -- used to auto-filter a seller's *other* items
@@ -195,44 +194,12 @@ export async function fetchSoldOrders(userId: string, sinceIso?: string): Promis
   return all;
 }
 
-type EbayFinancesTransaction = {
-  orderId?: string;
-  totalFeeBasisAmount?: { value: string };
-  feeType?: string;
-  amount?: { value: string };
-  transactionType?: string;
-};
-
-type EbayFinancesResponse = {
-  transactions?: EbayFinancesTransaction[];
-};
-
-// Marketplace fees live in the Finances API, not the Fulfillment API used
-// above -- returns the total fee amount eBay charged for a given order (all
-// line items combined; the Finances API doesn't break fees out per line
-// item), or null if the lookup fails so a sync never aborts over missing fee
-// data (the user can still see/edit the sale, just without a fee figure).
-//
-// UNVERIFIED against a live Finances API response -- the exact transaction
-// shape (transactionType/feeType/amount fields) is a best-effort guess from
-// eBay's docs; confirm once EBAY_CLIENT_ID/SECRET/RUNAME are populated and
-// adjust the filter in fetchOrderFees/the fields read above if real responses
-// differ. Same caveat lib/ebay.ts already carries for its aspect_filter guess.
-export async function fetchOrderFees(userId: string, orderId: string): Promise<number | null> {
-  try {
-    const accessToken = await getValidAccessToken(userId);
-    const params = new URLSearchParams({ filter: `orderId:{${orderId}}` });
-    const res = await fetch(`${FINANCES_API_BASE}/transaction?${params}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!res.ok) return null;
-
-    const json = (await res.json()) as EbayFinancesResponse;
-    const feeTransactions = (json.transactions ?? []).filter((t) => t.transactionType === "NON_SALE_CHARGE" || t.feeType);
-    if (feeTransactions.length === 0) return null;
-
-    return feeTransactions.reduce((sum, t) => sum + (t.amount ? Math.abs(parseFloat(t.amount.value)) : 0), 0);
-  } catch {
-    return null;
-  }
-}
+// eBay's actual per-order fees live in the Finances API, which needs its own
+// OAuth scope and has an unverified response shape we can't confirm without
+// a live account -- as a placeholder, estimate the fee as a flat percentage
+// of the sale price instead of risking misreading real API data. Revisit
+// with a real Finances API call once that scope is available to test
+// against. Shared with the transactions table (lib/fees.ts carries no
+// "server-only" import) so an existing sale with no stored fee can show the
+// same estimate instead of a bare "0.00".
+export { estimateFee as estimateOrderFee } from "@/lib/fees";

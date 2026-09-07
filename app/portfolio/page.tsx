@@ -9,6 +9,7 @@ import { AddProductModal } from "@/components/AddProductModal";
 import { CONDITION_LABELS, type Condition } from "@/lib/condition";
 import { SEALED_TYPE_LABELS, type SealedProductType } from "@/lib/sealed";
 import { getPortfolioData, marketPriceFor } from "@/lib/portfolio";
+import { getClosedPositions } from "@/lib/pnl";
 import { getLatestPrices } from "@/lib/cards";
 import { getLatestSealedPrices } from "@/lib/sealed";
 
@@ -31,15 +32,16 @@ function isViewMode(value: string | undefined): value is ViewMode {
 export default async function PortfolioPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sort?: string; type?: string; view?: string }>;
+  searchParams: Promise<{ sort?: string; type?: string; view?: string; closed?: string }>;
 }) {
   const session = await verifySession();
   const params = await searchParams;
   const sort: SortKey = isSortKey(params.sort) ? params.sort : "recent";
   const type: TypeFilter = isTypeFilter(params.type) ? params.type : "all";
   const view: ViewMode = isViewMode(params.view) ? params.view : "grid";
+  const showClosed = params.closed === "1";
 
-  const [items, portfolio] = await Promise.all([
+  const [items, portfolio, closedPositions] = await Promise.all([
     prisma.collectionItem.findMany({
       where: { userId: session.userId },
       orderBy: { createdAt: "desc" },
@@ -65,6 +67,7 @@ export default async function PortfolioPage({
       },
     }),
     getPortfolioData(session.userId),
+    getClosedPositions(session.userId),
   ]);
 
   const cardIds = items.filter((i) => i.cardId).map((i) => i.cardId!);
@@ -74,11 +77,15 @@ export default async function PortfolioPage({
     getLatestSealedPrices(sealedIds),
   ]);
 
-  const filtered = items.filter((item) => {
-    if (type === "cards") return item.cardId != null;
-    if (type === "sealed") return item.sealedProductId != null;
-    return true;
-  });
+  // "Closed" is a status filter, not an add-on -- toggling it swaps the view
+  // to fully-sold positions instead of layering them on top of open ones.
+  const filtered = showClosed
+    ? []
+    : items.filter((item) => {
+        if (type === "cards") return item.cardId != null;
+        if (type === "sealed") return item.sealedProductId != null;
+        return true;
+      });
 
   const enriched = filtered.map((item) => {
     const marketPrice = marketPriceFor(item, cardPrices, sealedPrices);
@@ -95,11 +102,25 @@ export default async function PortfolioPage({
     return 0; // "recent" -- already ordered by createdAt desc from the query
   });
 
+  // Closed positions (fully bought then fully sold, so no CollectionItem
+  // survives -- see getClosedPositions). Hidden by default in both grid and
+  // table view; the "Closed" filter button swaps the view to show these
+  // instead of open positions (see `filtered` above), most recently closed
+  // first.
+  const closedFiltered = showClosed
+    ? closedPositions.filter((pos) => {
+        if (type === "cards") return pos.cardId != null;
+        if (type === "sealed") return pos.sealedProductId != null;
+        return true;
+      })
+    : [];
+
   function sortHref(nextSort: SortKey): string {
     const p = new URLSearchParams();
     if (nextSort !== "recent") p.set("sort", nextSort);
     if (type !== "all") p.set("type", type);
     if (view !== "grid") p.set("view", view);
+    if (showClosed) p.set("closed", "1");
     const qs = p.toString();
     return qs ? `/portfolio?${qs}` : "/portfolio";
   }
@@ -109,6 +130,7 @@ export default async function PortfolioPage({
     if (sort !== "recent") p.set("sort", sort);
     if (nextType !== "all") p.set("type", nextType);
     if (view !== "grid") p.set("view", view);
+    if (showClosed) p.set("closed", "1");
     const qs = p.toString();
     return qs ? `/portfolio?${qs}` : "/portfolio";
   }
@@ -118,6 +140,17 @@ export default async function PortfolioPage({
     if (sort !== "recent") p.set("sort", sort);
     if (type !== "all") p.set("type", type);
     if (nextView !== "grid") p.set("view", nextView);
+    if (showClosed) p.set("closed", "1");
+    const qs = p.toString();
+    return qs ? `/portfolio?${qs}` : "/portfolio";
+  }
+
+  function closedHref(nextShowClosed: boolean): string {
+    const p = new URLSearchParams();
+    if (sort !== "recent") p.set("sort", sort);
+    if (type !== "all") p.set("type", type);
+    if (view !== "grid") p.set("view", view);
+    if (nextShowClosed) p.set("closed", "1");
     const qs = p.toString();
     return qs ? `/portfolio?${qs}` : "/portfolio";
   }
@@ -167,7 +200,7 @@ export default async function PortfolioPage({
           </div>
         )}
 
-        {items.length > 0 && (
+        {(items.length > 0 || closedPositions.length > 0) && (
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div role="group" className="flex items-center gap-1 rounded-full border border-line bg-paper-raised p-1">
               {TYPE_OPTIONS.map((opt) => (
@@ -182,6 +215,15 @@ export default async function PortfolioPage({
                   {opt.label}
                 </Link>
               ))}
+              <Link
+                href={closedHref(!showClosed)}
+                aria-pressed={showClosed}
+                className={`rounded-full px-3 py-1.5 font-body text-sm font-medium transition ${
+                  showClosed ? "bg-emerald text-paper-raised" : "text-ink-muted hover:text-ink"
+                }`}
+              >
+                Closed
+              </Link>
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
@@ -217,7 +259,7 @@ export default async function PortfolioPage({
           </div>
         )}
 
-        {items.length === 0 ? (
+        {items.length === 0 && closedPositions.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-24 text-center">
             <p className="font-body text-lg font-medium text-ink">Your portfolio is empty</p>
             <p className="font-body text-sm text-ink-muted">
@@ -235,7 +277,7 @@ export default async function PortfolioPage({
                   <th className="px-3 py-2 font-medium">Cost/unit</th>
                   <th className="px-3 py-2 font-medium">Market</th>
                   <th className="px-3 py-2 font-medium">Value</th>
-                  <th className="px-3 py-2 font-medium">Unrealized</th>
+                  <th className="px-3 py-2 font-medium">P/L</th>
                   <th className="px-3 py-2 font-medium">Actions</th>
                 </tr>
               </thead>
@@ -280,6 +322,30 @@ export default async function PortfolioPage({
                     />
                   ) : null
                 )}
+                {closedFiltered.map((pos) => (
+                  <PortfolioTableRow
+                    key={`closed-${pos.cardId ?? pos.sealedProductId}-${pos.condition ?? ""}`}
+                    status="closed"
+                    href={pos.cardId ? `/cards/${pos.cardId}` : `/sealed/${pos.sealedProductId}`}
+                    imageUrl={pos.imageUrl}
+                    imageAlt={pos.itemName}
+                    itemType={pos.itemType}
+                    name={pos.itemName}
+                    setName={pos.setName}
+                    condition={pos.condition}
+                    quantity={pos.quantity}
+                    cost={pos.avgCostPerUnit}
+                    avgSalePrice={pos.avgSalePricePerUnit}
+                    realizedProfit={pos.totalProfit}
+                    realizedProfitPct={
+                      pos.totalProfit != null && pos.avgCostPerUnit != null && pos.avgCostPerUnit !== 0
+                        ? pos.totalProfit / (pos.avgCostPerUnit * pos.quantity)
+                        : null
+                    }
+                    cardId={pos.cardId}
+                    sealedProductId={pos.sealedProductId}
+                  />
+                ))}
               </tbody>
             </table>
           </div>
@@ -323,6 +389,37 @@ export default async function PortfolioPage({
                 />
               ) : null
             )}
+            {closedFiltered.map((pos) => (
+              <PortfolioItemTile
+                key={`closed-${pos.cardId ?? pos.sealedProductId}-${pos.condition ?? ""}`}
+                status="closed"
+                href={pos.cardId ? `/cards/${pos.cardId}` : `/sealed/${pos.sealedProductId}`}
+                imageUrl={pos.imageUrl}
+                imageAlt={pos.itemName}
+                fallbackLabel={pos.itemType === "card" ? "No image" : pos.itemName}
+                name={pos.itemName}
+                subtitle={
+                  (pos.setName ?? "") +
+                  (pos.itemType === "card" && pos.condition
+                    ? ` · ${CONDITION_LABELS[pos.condition as Condition] ?? pos.condition}`
+                    : pos.itemType === "sealed" && pos.condition
+                      ? ` · ${pos.condition}`
+                      : "")
+                }
+                quantity={pos.quantity}
+                cost={pos.avgCostPerUnit}
+                avgSalePrice={pos.avgSalePricePerUnit}
+                realizedProfit={pos.totalProfit}
+                realizedProfitPct={
+                  pos.totalProfit != null && pos.avgCostPerUnit != null && pos.avgCostPerUnit !== 0
+                    ? pos.totalProfit / (pos.avgCostPerUnit * pos.quantity)
+                    : null
+                }
+                cardId={pos.cardId}
+                sealedProductId={pos.sealedProductId}
+                condition={pos.condition}
+              />
+            ))}
           </div>
         )}
       </main>

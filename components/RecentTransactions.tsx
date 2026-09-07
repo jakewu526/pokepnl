@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import type { TransactionListItem, PurchaseListItem } from "@/lib/pnl";
 import { CONDITION_LABELS, type Condition } from "@/lib/condition";
 import { MARKETPLACES, MARKETPLACE_LABELS, MARKETPLACE_OTHER_MAX_LENGTH } from "@/lib/marketplace";
+import { estimateFee } from "@/lib/fees";
 import { updatePurchaseLot, updateTransaction } from "@/app/actions/collection";
 
 const MARKETPLACE_LABEL_SET = new Set<string>(Object.values(MARKETPLACE_LABELS));
@@ -238,10 +239,10 @@ export function SellTable({
             <th className="px-3 py-2 font-medium">Date</th>
             <th className="px-3 py-2 font-medium">Item</th>
             <th className="px-3 py-2 font-medium">Qty</th>
-            <th className="px-3 py-2 font-medium">Cost</th>
             <th className="px-3 py-2 font-medium">Sold for</th>
+            <th className="px-3 py-2 font-medium">Fees</th>
+            <th className="px-3 py-2 font-medium">Shipping</th>
             <th className="px-3 py-2 font-medium">Sold on</th>
-            <th className="px-3 py-2 font-medium">Net profit</th>
           </tr>
         </thead>
         <tbody>
@@ -292,9 +293,6 @@ export function SellTable({
                   )}
                 </td>
                 <td className="px-3 py-2 font-data text-ink-muted">
-                  {tx.costPerUnit != null ? priceFormatter.format(tx.costPerUnit) : "—"}
-                </td>
-                <td className="px-3 py-2 font-data text-ink-muted">
                   {editable ? (
                     <EditableAmountCell
                       value={tx.salePricePerUnit}
@@ -306,6 +304,45 @@ export function SellTable({
                   )}
                 </td>
                 <td className="px-3 py-2 font-data text-ink-muted">
+                  {(() => {
+                    // A sale with no recorded fee (older rows, or a manual
+                    // sale that predates fee tracking) shows the same 15%
+                    // estimate a fresh eBay import now stores, rather than a
+                    // bare "0.00"/"—" -- marked with "~" since it isn't an
+                    // actual recorded figure until the row is edited.
+                    const isEstimate = tx.feesTotal == null;
+                    const feesValue = tx.feesTotal ?? estimateFee(tx.salePricePerUnit, tx.quantity);
+                    return editable ? (
+                      <div className="flex flex-col gap-0.5">
+                        <EditableAmountCell
+                          value={feesValue}
+                          kind="currency"
+                          onCommit={(next) => updateTransaction(tx.id, { feesTotal: next })}
+                        />
+                        {isEstimate && <span className="font-body text-[10px] text-ink-muted">est. 15%</span>}
+                      </div>
+                    ) : (
+                      <span title={isEstimate ? "Estimated at 15% of sale price -- no fee recorded" : undefined}>
+                        {isEstimate ? "~" : ""}
+                        {priceFormatter.format(feesValue)}
+                      </span>
+                    );
+                  })()}
+                </td>
+                <td className="px-3 py-2 font-data text-ink-muted">
+                  {editable ? (
+                    <EditableAmountCell
+                      value={tx.shippingCost ?? 0}
+                      kind="currency"
+                      onCommit={(next) => updateTransaction(tx.id, { shippingCost: next })}
+                    />
+                  ) : tx.shippingCost != null ? (
+                    priceFormatter.format(tx.shippingCost)
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td className="px-3 py-2 font-data text-ink-muted">
                   {editable ? (
                     <EditableMarketplaceCell
                       value={tx.marketplace}
@@ -314,13 +351,6 @@ export function SellTable({
                   ) : (
                     tx.marketplace ?? "—"
                   )}
-                </td>
-                <td
-                  className={`px-3 py-2 font-data font-medium ${
-                    tx.profit == null ? "text-ink-muted" : tx.profit < 0 ? "text-amber" : "text-emerald-strong"
-                  }`}
-                >
-                  {tx.profit != null ? signedPrice(tx.profit) : "—"}
                 </td>
               </tr>
             );
