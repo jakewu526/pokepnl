@@ -104,7 +104,6 @@ export function ChartZoom({ title, children }: { title: string; children: (zoome
           batch's viewport lock (see globals.css) exists to prevent, and it
           would otherwise fight this gesture for the same two taps. */}
       <div
-        className="h-full"
         style={{ touchAction: "manipulation" }}
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
@@ -129,7 +128,16 @@ export function ChartZoom({ title, children }: { title: string; children: (zoome
               <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
             </svg>
           </button>
-          <div className="flex-1 overflow-y-auto pt-8">{children(true)}</div>
+          {/* min-h-full + centering on the INNER div, not the scrolling
+              outer one -- centering the scroll container itself is a known
+              flexbox pitfall (`justify-content: center` combined with
+              overflow can make the start of taller-than-box content
+              unreachable even with scroll). This wrapper centers the chart
+              when it's shorter than the overlay and simply grows (with the
+              outer div scrolling normally) when it's taller. */}
+          <div className="flex-1 overflow-y-auto pt-8">
+            <div className="flex min-h-full flex-col justify-center">{children(true)}</div>
+          </div>
         </div>
       )}
     </>

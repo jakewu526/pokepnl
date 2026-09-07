@@ -74,18 +74,18 @@ export function ValueBars({
   /** Gates the line-sweep entrance -- false renders the line pre-drawn-hidden
       until the caller flips this once the chart has scrolled into view. */
   animate?: boolean;
-  /** Shorter canvas and a narrower y-axis label gutter -- DashboardOverview's
-      one caller passes this always true, at every breakpoint, since that
-      whole slide targets fitting a single viewport (mobile now included,
-      not just desktop -- see the comment atop DashboardOverview). */
+  /** Shorter canvas and a narrower y-axis label gutter -- DashboardOverview
+      passes this true for the compact fitted-dashboard card, and false when
+      ChartZoom's double-tap enlarges it, so the chart visibly grows rather
+      than staying pinned to the same width-driven aspect ratio. */
   compact?: boolean;
 }) {
   const gradientId = useId();
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [range, setRange] = useState<RangeKey | null>(null);
 
-  const HEIGHT = compact ? 260 : 320;
-  const PAD_LEFT = compact ? 38 : 52;
+  const HEIGHT = compact ? 220 : 640;
+  const PAD_LEFT = compact ? 34 : 56;
 
   const costByDate = useMemo(
     () => new Map(costBasisPoints.map((p) => [p.date, p.price])),
@@ -158,7 +158,7 @@ export function ValueBars({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-card border border-line bg-paper-raised p-3 sm:p-5">
+    <div className="flex flex-col rounded-card border border-line bg-paper-raised p-3 sm:p-5">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-3 sm:mb-4">
         <div>
           <h3 className="font-display text-base font-semibold tracking-tight text-ink sm:text-xl">Value over time</h3>

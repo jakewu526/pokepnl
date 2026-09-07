@@ -72,13 +72,17 @@ export function DashboardOverview({
   return (
     <div
       ref={rootRef}
-      // Below md this is a *fixed*-height column (viewport minus header, tab
-      // bar, and safe-area slack) so the stat grid and both charts are
-      // guaranteed to fit one phone screen with nothing scrolling -- see the
-      // mobile batch plan. md and up reverts to the original "fit one
-      // desktop viewport" sizing, unconstrained height, centered content.
-      className="mx-auto flex h-[calc(100dvh-11rem)] max-w-6xl flex-col gap-2 px-3 py-3 md:h-auto md:min-h-full md:justify-center md:gap-4 md:px-4 md:py-6 sm:px-6 lg:gap-3"
+      // Below md this stacks with each section at its own natural (compact)
+      // size rather than a forced-fit height -- an earlier version pinned
+      // this to a guessed `100dvh` calc, which clipped content whenever the
+      // guess undershot a real device's header/tab-bar/safe-area chrome.
+      // Natural sizing can't clip; worst case the page scrolls a little,
+      // same as every other page in the app. md and up is unchanged: the
+      // original "fit one desktop viewport" sizing, centered content.
+      className="mx-auto flex max-w-6xl flex-col gap-2 px-3 py-3 md:min-h-full md:justify-center md:gap-4 md:px-4 md:py-6 sm:px-6 lg:gap-3"
     >
+      <h1 className="font-display text-xl font-semibold tracking-tight text-ink md:hidden">Dashboard</h1>
+
       <div className="grid shrink-0 grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
         <StatTile
           label="What it's worth"
@@ -106,12 +110,7 @@ export function DashboardOverview({
         />
       </div>
 
-      {/* auto-rows-fr splits the remaining fixed height evenly between the
-          two chart cards below md, so neither can push the column past the
-          viewport regardless of its own content height. At md+ this goes
-          back to natural stacked-row sizing (single column, unconstrained),
-          same as before this batch; lg still splits into two columns. */}
-      <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-1 gap-2 md:flex-none md:auto-rows-auto md:gap-3 lg:grid-cols-[1.6fr_1fr]">
+      <div className="grid grid-cols-1 gap-2 md:gap-3 lg:grid-cols-[1.6fr_1fr]">
         <ChartZoom title="Value over time">
           {(zoomed) => (
             <ValueBars

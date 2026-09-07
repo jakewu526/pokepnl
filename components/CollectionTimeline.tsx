@@ -24,7 +24,18 @@ function hasActivity(day: TimelineDay): boolean {
 // `compact` drops the descriptive paragraph and tightens the rail -- used on
 // the dashboard's fitted overview slide, where this sits alongside three
 // other components in one viewport rather than having a page to itself.
-export function CollectionTimeline({ timeline, compact = false }: { timeline: TimelineData; compact?: boolean }) {
+export function CollectionTimeline({
+  timeline,
+  compact = false,
+  large = false,
+}: {
+  timeline: TimelineData;
+  compact?: boolean;
+  /** Taller rail for ChartZoom's double-tap-enlarged view -- without this the
+      rail stayed pinned to its normal height and double-tapping "Your
+      history" just opened a fullscreen box around the same small rail. */
+  large?: boolean;
+}) {
   const [hover, setHover] = useState<number | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
@@ -60,7 +71,11 @@ export function CollectionTimeline({ timeline, compact = false }: { timeline: Ti
       )}
 
       <div className={`relative ${compact ? "mt-3" : ""}`} onPointerLeave={() => setHover(null)}>
-        <div className={`relative flex items-stretch gap-px ${compact ? "h-[64px] pt-6" : "h-[104px] pt-8"}`}>
+        <div
+          className={`relative flex items-stretch gap-px ${
+            large ? "h-[280px] pt-12" : compact ? "h-[64px] pt-6" : "h-[104px] pt-8"
+          }`}
+        >
           {/* Tooltip follows the hovered day and flips above/below the rail
               depending on which side has less bar to cover. */}
           {active && hasActivity(active) && (

@@ -12,5 +12,9 @@ import type { CollectionTimeline as TimelineData } from "@/lib/dashboard";
 // `timeline` as a normal (serializable) prop and build the function on the
 // client side instead.
 export function MobileTimelineZoom({ timeline }: { timeline: TimelineData }) {
-  return <ChartZoom title="Your history">{() => <CollectionTimeline timeline={timeline} />}</ChartZoom>;
+  return (
+    <ChartZoom title="Your history">
+      {(zoomed) => <CollectionTimeline timeline={timeline} large={zoomed} />}
+    </ChartZoom>
+  );
 }

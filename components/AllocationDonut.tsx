@@ -8,10 +8,14 @@ const percentFormatter = new Intl.NumberFormat("en-US", { style: "percent", maxi
 
 const SIZE = 240;
 const STROKE = 16;
-// The band every ring's radius is spread across -- smallest segment lands at
-// MIN_RADIUS, largest at MAX_RADIUS, everything else evenly between.
-const MIN_RADIUS = 36;
 const MAX_RADIUS = SIZE / 2 - STROKE / 2 - 6;
+// Rings nest inward from MAX_RADIUS by this fixed gap each, rather than
+// spreading across the full band down to some small MIN_RADIUS -- the
+// smaller (by value) segment sits just inside the larger one, not way down
+// near the center where it would overlap the center readout text. With the
+// app's two categories (cards, sealed) that's exactly one ring just inside
+// the other; a third category would nest one gap further in again.
+const RING_GAP = STROKE + 6;
 
 // Fixed, CVD-checked ramp from globals.css. Cards and sealed always land on
 // the same two colours so the rings, the legend, and any future segment
@@ -59,7 +63,10 @@ export function AllocationDonut({
   const n = drawable.length;
 
   const segments = drawable.map((slice, i) => {
-    const radius = n <= 1 ? MAX_RADIUS : MIN_RADIUS + ((MAX_RADIUS - MIN_RADIUS) * i) / (n - 1);
+    // i is rank from smallest (0) to largest (n-1) -- nest inward from the
+    // outer edge, so the largest segment always sits at MAX_RADIUS and
+    // every smaller one is exactly one RING_GAP further in.
+    const radius = Math.max(RING_GAP, MAX_RADIUS - (n - 1 - i) * RING_GAP);
     const circumference = 2 * Math.PI * radius;
     const shareBefore = drawable.slice(0, i).reduce((acc, prev) => acc + prev.value, 0) / sum;
     const share = slice.value / sum;
@@ -74,7 +81,7 @@ export function AllocationDonut({
   });
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-card border border-line bg-paper-raised p-3 sm:p-5">
+    <div className="flex flex-col rounded-card border border-line bg-paper-raised p-3 sm:p-5">
       <h3
         className={`font-display font-semibold tracking-tight text-ink ${large ? "text-xl" : "text-base sm:text-xl"}`}
       >
@@ -84,15 +91,22 @@ export function AllocationDonut({
         Where the value sits right now.
       </p>
 
-      {/* Side-by-side at every width (not just sm:flex-row) -- stacking the
-          legend below the rings was the single biggest space cost on the
-          fitted mobile dashboard screen. The ring box itself is sized
-          responsively (120px mobile, 240px at sm+) via Tailwind rather than
-          the SIZE constant, which stays the viewBox's internal coordinate
-          space only -- `large` forces the sm+ size even under 640px, for
-          ChartZoom's fullscreen view. */}
-      <div className={`mt-2 flex flex-1 items-center gap-3 ${large ? "mt-4 gap-8" : "sm:mt-4 sm:gap-8"}`}>
-        <div className={`relative shrink-0 ${large ? "size-[240px]" : "size-[120px] sm:size-[240px]"}`}>
+      {/* Side-by-side at every width up to `large`, where it stacks instead:
+          ChartZoom's fullscreen overlay is narrow (phone width) but tall, so
+          a side-by-side ring+legend there squeezes the ring down to roughly
+          its normal small size and crowds the legend -- stacking lets the
+          ring actually grow to use the extra vertical room. The ring box
+          itself is sized responsively via Tailwind (104px mobile, 240px at
+          sm+, up to 280px when large) rather than the SIZE constant, which
+          stays the viewBox's internal coordinate space only. */}
+      <div
+        className={
+          large
+            ? "mt-4 flex flex-1 flex-col items-center gap-4"
+            : "mt-2 flex flex-1 items-center gap-3 sm:mt-4 sm:gap-8"
+        }
+      >
+        <div className={`relative shrink-0 ${large ? "aspect-square w-full max-w-[280px]" : "size-[104px] sm:size-[240px]"}`}>
           <svg
             viewBox={`0 0 ${SIZE} ${SIZE}`}
             className="h-full w-full"
