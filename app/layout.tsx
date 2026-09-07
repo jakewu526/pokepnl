@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
+import { MobileTabBar } from "@/components/MobileTabBar";
 
 const fraunces = Fraunces({
   variable: "--font-display",
@@ -36,8 +37,9 @@ export default function RootLayout({
       lang="en"
       className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable} h-full`}
     >
-      <body className="min-h-full flex flex-col font-body antialiased">
+      <body className="min-h-full flex flex-col pb-24 font-body antialiased md:pb-0">
         {children}
+        <MobileTabBar />
       </body>
     </html>
   );
