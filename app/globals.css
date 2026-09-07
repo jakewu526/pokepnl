@@ -95,6 +95,18 @@
   }
 }
 
+/* Guards against any element wider than the viewport de-centering the whole
+   page on mobile -- Safari/Chrome on a phone let a user pinch below 1.0x
+   exactly when scrollWidth > clientWidth, which reads as the layout
+   drifting/zooming out on its own. `clip`, not `hidden`: `hidden` on
+   html/body turns it into a scroll container, which silently breaks every
+   `position: sticky` header in the app and the dashboard's `lg:snap-y`
+   container. `clip` paints nothing past the edge without creating one. */
+html,
+body {
+  overflow-x: clip;
+}
+
 body {
   background: var(--paper);
   color: var(--ink);

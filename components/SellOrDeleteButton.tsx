@@ -1,65 +1,9 @@
 "use client";
 
-import Image from "next/image";
-import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { useState, useTransition } from "react";
 import { deletePosition, sellCollectionItem } from "@/app/actions/collection";
 import { MARKETPLACES, MARKETPLACE_LABELS, MARKETPLACE_OTHER_MAX_LENGTH, type Marketplace } from "@/lib/marketplace";
-
-// Kept at module scope (not nested in SellOrDeleteButton) so its identity is
-// stable across renders -- a component defined inside another component's
-// body gets redefined every render, which makes React remount it (and drop
-// input focus) on every keystroke in the sell form below.
-function DialogShell({
-  open,
-  onClose,
-  title,
-  itemName,
-  imageUrl,
-  children,
-}: {
-  open: boolean;
-  onClose: () => void;
-  title: string;
-  itemName: string;
-  imageUrl: string | null;
-  children: ReactNode;
-}) {
-  if (!open) return null;
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
-      onClick={onClose}
-      role="presentation"
-    >
-      <div
-        className="w-full max-w-sm rounded-card border border-line bg-paper p-5 shadow-lg sm:p-6"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded bg-line/40">
-              {imageUrl && <Image src={imageUrl} alt={itemName} fill sizes="48px" className="object-contain" />}
-            </div>
-            <div className="min-w-0">
-              <h2 className="font-display text-lg font-semibold tracking-tight text-ink">{title}</h2>
-              <p className="truncate font-body text-xs text-ink-muted">{itemName}</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded-full border border-line px-2.5 py-1 font-body text-xs font-medium text-ink-muted transition-colors hover:bg-paper-raised"
-          >
-            Close
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
+import { DialogShell } from "@/components/DialogShell";
 
 // Both Sell and Delete open as real dialogs -- same fixed-inset shell as
 // PositionActivityModal/DayActivityModal -- rather than expanding inline in
@@ -86,17 +30,6 @@ export function SellOrDeleteButton({
   const [shipping, setShipping] = useState("");
   const [marketplace, setMarketplace] = useState<Marketplace>("EBAY");
   const [otherMarketplace, setOtherMarketplace] = useState("");
-
-  useEffect(() => {
-    if (!sellOpen && !deleteOpen) return;
-    function handleKey(e: KeyboardEvent) {
-      if (e.key !== "Escape") return;
-      setSellOpen(false);
-      setDeleteOpen(false);
-    }
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [sellOpen, deleteOpen]);
 
   function openSell() {
     setQtySold(String(quantity));
@@ -155,44 +88,41 @@ export function SellOrDeleteButton({
         </button>
       </div>
 
-      <DialogShell
-        open={deleteOpen}
-        onClose={() => setDeleteOpen(false)}
-        title="Delete"
-        itemName={itemName}
-        imageUrl={imageUrl}
-      >
-        <div className="flex flex-col gap-3">
-          <p className="font-body text-sm text-ink-muted">
-            This permanently deletes this position and its full purchase/sale history. This can&apos;t be undone.
-          </p>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => startTransition(() => deletePosition(collectionItemId))}
-              className="font-body text-xs font-medium text-amber hover:underline disabled:opacity-60"
-            >
-              {pending ? "Deleting…" : "Confirm delete"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setDeleteOpen(false)}
-              className="font-body text-xs font-medium text-ink-muted hover:text-ink"
-            >
-              Cancel
-            </button>
+      {deleteOpen && (
+        <DialogShell
+          onClose={() => setDeleteOpen(false)}
+          title="Delete"
+          titleClassName="text-lg"
+          subtitle={itemName}
+          imageUrl={imageUrl}
+        >
+          <div className="flex flex-col gap-3">
+            <p className="font-body text-sm text-ink-muted">
+              This permanently deletes this position and its full purchase/sale history. This can&apos;t be undone.
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => startTransition(() => deletePosition(collectionItemId))}
+                className="font-body text-xs font-medium text-amber hover:underline disabled:opacity-60"
+              >
+                {pending ? "Deleting…" : "Confirm delete"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteOpen(false)}
+                className="font-body text-xs font-medium text-ink-muted hover:text-ink"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-        </div>
-      </DialogShell>
+        </DialogShell>
+      )}
 
-      <DialogShell
-        open={sellOpen}
-        onClose={() => setSellOpen(false)}
-        title="Sell"
-        itemName={itemName}
-        imageUrl={imageUrl}
-      >
+      {sellOpen && (
+        <DialogShell onClose={() => setSellOpen(false)} title="Sell" titleClassName="text-lg" subtitle={itemName} imageUrl={imageUrl}>
         <div className="flex flex-col gap-3">
           {quantity > 1 && (
             <label className="flex flex-col gap-1">
@@ -327,7 +257,8 @@ export function SellOrDeleteButton({
             </button>
           </div>
         </div>
-      </DialogShell>
+        </DialogShell>
+      )}
     </>
   );
 }

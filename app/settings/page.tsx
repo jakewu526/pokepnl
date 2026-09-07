@@ -1,12 +1,18 @@
 import Link from "next/link";
-import { verifySession } from "@/lib/dal";
+import { verifySession, getCurrentUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { AuthNav } from "@/components/AuthNav";
 import { EbayConnectionCard } from "@/components/EbayConnectionCard";
+import { logout } from "@/app/actions/auth";
 
 export default async function SettingsPage() {
   const session = await verifySession();
-  const ebayAccount = await prisma.ebayAccount.findUnique({ where: { userId: session.userId } });
+  const [ebayAccount, user] = await Promise.all([
+    prisma.ebayAccount.findUnique({ where: { userId: session.userId } }),
+    // verifySession() already guarantees this account has a name/email --
+    // getCurrentUser() is cached, so this doesn't add a second query.
+    getCurrentUser(),
+  ]);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -30,9 +36,29 @@ export default async function SettingsPage() {
           />
         </section>
 
-        <section>
+        <section className="mb-10">
           <h2 className="mb-3 font-display text-lg font-semibold tracking-tight text-ink">Preferences</h2>
           <p className="font-body text-sm text-ink-muted">More settings coming soon.</p>
+        </section>
+
+        {/* Shown at every width -- this is the only logout path on mobile,
+            now that AuthNav's full link row (which had its own Log out
+            button) is hidden below md in favor of UserMenuButton. Harmless
+            to also show it here on desktop. */}
+        <section>
+          <h2 className="mb-3 font-display text-lg font-semibold tracking-tight text-ink">Account</h2>
+          <div className="rounded-card border border-line bg-paper-raised p-4">
+            <p className="font-body text-sm text-ink">{user?.name}</p>
+            <p className="font-body text-xs text-ink-muted">{user?.email}</p>
+            <form action={logout} className="mt-4">
+              <button
+                type="submit"
+                className="w-full rounded-card border border-line px-4 py-3 font-body text-sm font-medium text-ink-muted transition-colors hover:text-ink sm:w-auto"
+              >
+                Log out
+              </button>
+            </form>
+          </div>
         </section>
       </main>
     </div>

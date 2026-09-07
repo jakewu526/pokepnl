@@ -24,8 +24,6 @@ const compactPrice = new Intl.NumberFormat("en-US", {
 const dateFormatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 const WIDTH = 720;
-const HEIGHT = 320;
-const PAD_LEFT = 52;
 const PAD_RIGHT = 12;
 const PAD_TOP = 16;
 const PAD_BOTTOM = 28;
@@ -69,16 +67,25 @@ export function ValueBars({
   valuePoints,
   costBasisPoints,
   animate = true,
+  compact = false,
 }: {
   valuePoints: PricePoint[];
   costBasisPoints: PricePoint[];
   /** Gates the line-sweep entrance -- false renders the line pre-drawn-hidden
       until the caller flips this once the chart has scrolled into view. */
   animate?: boolean;
+  /** Shorter canvas and a narrower y-axis label gutter -- DashboardOverview's
+      one caller passes this always true, at every breakpoint, since that
+      whole slide targets fitting a single viewport (mobile now included,
+      not just desktop -- see the comment atop DashboardOverview). */
+  compact?: boolean;
 }) {
   const gradientId = useId();
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [range, setRange] = useState<RangeKey | null>(null);
+
+  const HEIGHT = compact ? 260 : 320;
+  const PAD_LEFT = compact ? 38 : 52;
 
   const costByDate = useMemo(
     () => new Map(costBasisPoints.map((p) => [p.date, p.price])),
@@ -133,7 +140,7 @@ export function ValueBars({
     const ticks = [0, 0.5, 1].map((f) => ({ value: top * f, y: y(top * f) }));
 
     return { marks, linePath, areaPath, sweepLength, top, plotH, baselineY, y, latestCost, ticks, stepX };
-  }, [points, costByDate]);
+  }, [points, costByDate, HEIGHT, PAD_LEFT]);
 
   if (!view) return null;
 
@@ -151,11 +158,11 @@ export function ValueBars({
   }
 
   return (
-    <div className="rounded-card border border-line bg-paper-raised p-4 sm:p-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div className="flex h-full flex-col overflow-hidden rounded-card border border-line bg-paper-raised p-3 sm:p-5">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-3 sm:mb-4">
         <div>
-          <h3 className="font-display text-xl font-semibold tracking-tight text-ink">Value over time</h3>
-          <p className="mt-0.5 font-body text-sm text-ink-muted">
+          <h3 className="font-display text-base font-semibold tracking-tight text-ink sm:text-xl">Value over time</h3>
+          <p className="mt-0.5 hidden font-body text-sm text-ink-muted sm:block">
             Every point is a real day. The dashed line is what you paid.
           </p>
         </div>

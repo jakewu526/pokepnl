@@ -10,6 +10,8 @@ import { CardPriceHistory } from "@/components/CardPriceHistory";
 import { AuthNav } from "@/components/AuthNav";
 import { AddToCollectionButton } from "@/components/AddToCollectionButton";
 import { WatchlistHeartButton } from "@/components/WatchlistHeartButton";
+import { HoldingPanel } from "@/components/HoldingPanel";
+import { getHoldingsForCard } from "@/lib/portfolio";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -35,7 +37,10 @@ export default async function CardDetailPage({
     getCardReverseHoloHistory(id),
     getCurrentUser(),
   ]);
-  const watchedIds = user ? await getWatchlistedCardIds(user.id, [id]) : new Set<string>();
+  const [watchedIds, holdings] = await Promise.all([
+    user ? getWatchlistedCardIds(user.id, [id]) : Promise.resolve(new Set<string>()),
+    user ? getHoldingsForCard(user.id, id) : Promise.resolve([]),
+  ]);
   // More than one series means real graded-tier data exists (PSA-style
   // Grade 7 through Grade 10, not just the single Ungraded/raw price) --
   // otherwise fall back to the single-source chart, which already shows
@@ -122,6 +127,10 @@ export default async function CardDetailPage({
                 <Suspense fallback={null}>
                   <AddToCollectionButton cardId={card.id} marketPrice={card.price} />
                 </Suspense>
+              </div>
+
+              <div className="mt-4">
+                <HoldingPanel holdings={holdings} imageUrl={card.imageUrl} />
               </div>
             </div>
 

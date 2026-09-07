@@ -9,6 +9,8 @@ import { PriceChart } from "@/components/PriceChart";
 import { AuthNav } from "@/components/AuthNav";
 import { AddSealedToCollectionButton } from "@/components/AddSealedToCollectionButton";
 import { WatchlistHeartButton } from "@/components/WatchlistHeartButton";
+import { HoldingPanel } from "@/components/HoldingPanel";
+import { getHoldingsForSealedProduct } from "@/lib/portfolio";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -24,7 +26,10 @@ export default async function SealedProductDetailPage({
   const product = await getSealedProductDetail(id);
   if (!product) notFound();
   const user = await getCurrentUser();
-  const watchedIds = user ? await getWatchlistedSealedIds(user.id, [id]) : new Set<string>();
+  const [watchedIds, holdings] = await Promise.all([
+    user ? getWatchlistedSealedIds(user.id, [id]) : Promise.resolve(new Set<string>()),
+    user ? getHoldingsForSealedProduct(user.id, id) : Promise.resolve([]),
+  ]);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -102,6 +107,10 @@ export default async function SealedProductDetailPage({
                 <Suspense fallback={null}>
                   <AddSealedToCollectionButton sealedProductId={product.id} marketPrice={product.price} />
                 </Suspense>
+              </div>
+
+              <div className="mt-4">
+                <HoldingPanel holdings={holdings} imageUrl={product.imageUrl} />
               </div>
             </div>
 

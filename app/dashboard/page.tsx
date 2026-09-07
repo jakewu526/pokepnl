@@ -4,13 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { AuthNav } from "@/components/AuthNav";
 import { CollectionHero, type HeroArt } from "@/components/CollectionHero";
 import { DashboardOverview } from "@/components/DashboardOverview";
+import { MobileTimelineZoom } from "@/components/MobileTimelineZoom";
 import { TopMovers } from "@/components/TopMovers";
 import { RecentTransactions } from "@/components/RecentTransactions";
 import { PortfolioItemTile } from "@/components/PortfolioItemTile";
 import { PortfolioCarousel } from "@/components/PortfolioCarousel";
-import { CONDITION_LABELS, CONDITION_MULTIPLIERS, type Condition } from "@/lib/condition";
+import { CONDITION_LABELS, type Condition } from "@/lib/condition";
 import { SEALED_TYPE_LABELS, type SealedProductType } from "@/lib/sealed";
-import { getPortfolioData, deltaOverDays } from "@/lib/portfolio";
+import { getPortfolioData, deltaOverDays, marketPriceFor } from "@/lib/portfolio";
 import { getPnlSummary, getRealizedProfitHistory, getTransactionHistory, getPurchaseHistory } from "@/lib/pnl";
 import { getTopMovers, getAllocation, getCollectionTimeline } from "@/lib/dashboard";
 import { getLatestPrices } from "@/lib/cards";
@@ -98,18 +99,6 @@ export default async function DashboardPage() {
     getLatestSealedPrices(sealedIds),
   ]);
 
-  function marketPriceFor(item: (typeof recentItems)[number]): number | null {
-    if (item.cardId) {
-      const info = cardPrices.get(item.cardId);
-      if (!info) return null;
-      const multiplier = CONDITION_MULTIPLIERS[(item.condition as Condition) ?? "NM"] ?? 1;
-      return info.price * multiplier;
-    }
-    if (item.sealedProductId) {
-      return sealedPrices.get(item.sealedProductId)?.price ?? null;
-    }
-    return null;
-  }
 
   const unrealizedHistory = portfolio.history.map((p, i) => ({
     date: p.date,
@@ -153,7 +142,7 @@ export default async function DashboardPage() {
   return (
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-20 border-b border-line bg-paper/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 sm:py-4">
           <Link href="/" className="font-body text-sm font-medium text-emerald-strong hover:underline">
             ← Binder
           </Link>
@@ -182,7 +171,10 @@ export default async function DashboardPage() {
           // Proximity only snaps when already close to a snap point and
           // never fights a scroll gesture headed past the last one.
           <div className="lg:h-[calc(100dvh-4.5rem)] lg:snap-y lg:snap-proximity lg:overflow-y-auto">
-            <section className="lg:min-h-full lg:snap-start">
+            {/* Hidden below md -- the hero's big card art and narrative
+                sentence don't fit the "everything on one screen" mobile
+                budget, so mobile skips straight to the numbers below. */}
+            <section className="hidden md:block lg:min-h-full lg:snap-start">
               <CollectionHero pulse={pulse} art={heroArt} firstName={firstName} />
             </section>
             <section className="lg:min-h-full lg:snap-start">
@@ -203,6 +195,14 @@ export default async function DashboardPage() {
             </section>
 
             <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 pt-10 pb-16 sm:px-6">
+              {/* DashboardOverview's own timeline mount is md:hidden (see
+                  that component) so it can be dropped from the fitted
+                  mobile screen -- this is the same data surfacing below the
+                  fold on mobile instead, in normal scrolling flow. */}
+              <div className="md:hidden">
+                <MobileTimelineZoom timeline={timeline} />
+              </div>
+
               <TopMovers gainers={topMovers.gainers} losers={topMovers.losers} />
 
               <div>
@@ -222,7 +222,7 @@ export default async function DashboardPage() {
                 </div>
                 <PortfolioCarousel>
                   {recentItems.map((item) => {
-                    const marketPrice = marketPriceFor(item);
+                    const marketPrice = marketPriceFor(item, cardPrices, sealedPrices);
                     const cost = item.costPerUnit != null ? parseFloat(item.costPerUnit.toString()) : null;
                     const unrealized =
                       cost != null && marketPrice != null ? (marketPrice - cost) * item.quantity : null;

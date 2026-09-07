@@ -1,6 +1,10 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { SellOrDeleteButton } from "@/components/SellOrDeleteButton";
+import { ItemInfoModal } from "@/components/ItemInfoModal";
 
 const priceFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -24,6 +28,14 @@ function signedPercent(value: number): string {
 // Shared tile for both cards and sealed product holdings -- the two blocks in
 // the old collection page were identical apart from the image fallback label
 // and the subtitle string, so the caller builds those and this just renders.
+//
+// Below md this renders a slimmed-down body -- image, name, subtitle, one
+// per-unit price (same meaning as CardTile's price line, so a tile reads the
+// same everywhere in the app), and a plain-text "More Info" link that opens
+// ItemInfoModal with everything else. Sell/Delete are dropped from the
+// mobile tile entirely -- those actions now live on the item's own page (see
+// HoldingPanel), reachable from the modal's "View item page" link. At md and
+// up the tile is unchanged from before this batch.
 export function PortfolioItemTile({
   href,
   imageUrl,
@@ -51,6 +63,7 @@ export function PortfolioItemTile({
   collectionItemId: string;
   marketPrice: number | null;
 }) {
+  const [infoOpen, setInfoOpen] = useState(false);
   const marketValue = marketPrice != null ? marketPrice * quantity : null;
 
   return (
@@ -73,38 +86,72 @@ export function PortfolioItemTile({
       <div className="flex flex-1 flex-col gap-1 border-t border-line px-3 py-3">
         <h2 className="font-body text-[15px] font-semibold leading-snug text-ink">{name}</h2>
         <p className="font-body text-[13px] text-ink-muted">{subtitle}</p>
-        <p className="font-data text-[13px] text-ink-muted">Qty {quantity}</p>
-        <p className="font-data text-[13px] text-ink-muted">
-          Cost {cost != null ? priceFormatter.format(cost) : "—"}
-        </p>
-        <p className="font-data text-[13px] text-ink-muted">
-          Value {marketValue != null ? priceFormatter.format(marketValue) : "—"}
-          {marketPrice != null && (
-            <span className="text-ink-muted/70"> ({priceFormatter.format(marketPrice)}/ea)</span>
-          )}
-        </p>
-        {unrealized != null && (
-          <p
-            className={`font-data text-[13px] font-medium ${
-              unrealized < 0 ? "text-amber" : "text-emerald-strong"
-            }`}
+
+        {/* Mobile: one price, one "More Info" link. */}
+        <div className="md:hidden">
+          <p className="font-data text-lg font-medium text-emerald-strong">
+            {marketPrice != null ? priceFormatter.format(marketPrice) : "—"}
+          </p>
+          <button
+            type="button"
+            onClick={() => setInfoOpen(true)}
+            className="mt-1 font-body text-[13px] font-medium text-emerald-strong"
           >
-            {signedPrice(unrealized)}
-            {unrealizedPct != null && (
-              <span className="ml-1 font-body font-normal text-ink-muted">({signedPercent(unrealizedPct)})</span>
+            More Info
+          </button>
+        </div>
+
+        {/* Desktop: full breakdown + Sell/Delete, unchanged from before. */}
+        <div className="hidden md:contents">
+          <p className="font-data text-[13px] text-ink-muted">Qty {quantity}</p>
+          <p className="font-data text-[13px] text-ink-muted">
+            Cost {cost != null ? priceFormatter.format(cost) : "—"}
+          </p>
+          <p className="font-data text-[13px] text-ink-muted">
+            Value {marketValue != null ? priceFormatter.format(marketValue) : "—"}
+            {marketPrice != null && (
+              <span className="text-ink-muted/70"> ({priceFormatter.format(marketPrice)}/ea)</span>
             )}
           </p>
-        )}
-        <div className="mt-auto pt-2">
-          <SellOrDeleteButton
-            collectionItemId={collectionItemId}
-            itemName={name}
-            imageUrl={imageUrl}
-            quantity={quantity}
-            marketPrice={marketPrice}
-          />
+          {unrealized != null && (
+            <p
+              className={`font-data text-[13px] font-medium ${
+                unrealized < 0 ? "text-amber" : "text-emerald-strong"
+              }`}
+            >
+              {signedPrice(unrealized)}
+              {unrealizedPct != null && (
+                <span className="ml-1 font-body font-normal text-ink-muted">({signedPercent(unrealizedPct)})</span>
+              )}
+            </p>
+          )}
+          <div className="mt-auto pt-2">
+            <SellOrDeleteButton
+              collectionItemId={collectionItemId}
+              itemName={name}
+              imageUrl={imageUrl}
+              quantity={quantity}
+              marketPrice={marketPrice}
+            />
+          </div>
         </div>
       </div>
+
+      {infoOpen && (
+        <ItemInfoModal
+          name={name}
+          imageUrl={imageUrl}
+          subtitle={subtitle}
+          quantity={quantity}
+          cost={cost}
+          marketPrice={marketPrice}
+          marketValue={marketValue}
+          unrealized={unrealized}
+          unrealizedPct={unrealizedPct}
+          href={href}
+          onClose={() => setInfoOpen(false)}
+        />
+      )}
     </div>
   );
 }

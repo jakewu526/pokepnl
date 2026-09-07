@@ -47,21 +47,22 @@ export function StatTile({
     tone === "positive" ? "text-emerald-strong" : tone === "negative" ? "text-amber" : "text-ink";
 
   return (
-    <div className="rounded-card border border-line bg-paper-raised px-4 py-4 transition-shadow duration-200 hover:shadow-md">
-      <p className="font-body text-sm text-ink-muted">
+    <div className="rounded-card border border-line bg-paper-raised px-3 py-2.5 transition-shadow duration-200 hover:shadow-md sm:px-4 sm:py-4">
+      <p className="font-body text-xs text-ink-muted sm:text-sm">
         {label}
         {sublabel && <span className="text-ink-muted/80"> · {sublabel}</span>}
       </p>
-      <p className={`rise-in mt-1 font-data text-3xl font-medium ${valueClass}`}>
+      <p className={`rise-in mt-1 font-data text-xl font-medium sm:text-3xl ${valueClass}`}>
         <AnimatedNumber value={value} format={format} />
       </p>
       {delta && delta.abs !== 0 && (
         <p
-          className={`mt-1 font-data text-xs font-medium ${
+          className={`mt-1 font-data text-[10px] font-medium sm:text-xs ${
             delta.abs < 0 ? "text-amber" : "text-emerald-strong"
           }`}
         >
-          {delta.abs < 0 ? "▼" : "▲"} {signedCurrency(delta.abs)} · {signedPercent(delta.pct)} {deltaLabel}
+          {delta.abs < 0 ? "▼" : "▲"} {signedCurrency(delta.abs)} · {signedPercent(delta.pct)}{" "}
+          <span className="hidden sm:inline">{deltaLabel}</span>
         </p>
       )}
     </div>

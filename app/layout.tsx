@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { MobileTabBar } from "@/components/MobileTabBar";
@@ -27,6 +27,15 @@ export const metadata: Metadata = {
     "Browse the full Pokémon TCG catalog with current market prices, sourced daily from PriceCharting, TCGplayer, and Cardmarket.",
 };
 
+// viewportFit: "cover" is required for env(safe-area-inset-bottom), used by
+// both the body padding below and MobileTabBar's own safe-area padding, to
+// resolve to a non-zero value on notched/home-indicator devices.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -37,7 +46,7 @@ export default function RootLayout({
       lang="en"
       className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable} h-full`}
     >
-      <body className="min-h-full flex flex-col pb-24 font-body antialiased md:pb-0">
+      <body className="min-h-full flex flex-col pb-[calc(6rem+env(safe-area-inset-bottom))] font-body antialiased md:pb-0">
         {children}
         <MobileTabBar />
       </body>

@@ -6,9 +6,9 @@ import { StatTile } from "@/components/StatTile";
 import { PortfolioItemTile } from "@/components/PortfolioItemTile";
 import { PortfolioTableRow } from "@/components/PortfolioTableRow";
 import { AddProductModal } from "@/components/AddProductModal";
-import { CONDITION_LABELS, CONDITION_MULTIPLIERS, type Condition } from "@/lib/condition";
+import { CONDITION_LABELS, type Condition } from "@/lib/condition";
 import { SEALED_TYPE_LABELS, type SealedProductType } from "@/lib/sealed";
-import { getPortfolioData } from "@/lib/portfolio";
+import { getPortfolioData, marketPriceFor } from "@/lib/portfolio";
 import { getLatestPrices } from "@/lib/cards";
 import { getLatestSealedPrices } from "@/lib/sealed";
 
@@ -74,19 +74,6 @@ export default async function PortfolioPage({
     getLatestSealedPrices(sealedIds),
   ]);
 
-  function marketPriceFor(item: (typeof items)[number]): number | null {
-    if (item.cardId) {
-      const info = cardPrices.get(item.cardId);
-      if (!info) return null;
-      const multiplier = CONDITION_MULTIPLIERS[(item.condition as Condition) ?? "NM"] ?? 1;
-      return info.price * multiplier;
-    }
-    if (item.sealedProductId) {
-      return sealedPrices.get(item.sealedProductId)?.price ?? null;
-    }
-    return null;
-  }
-
   const filtered = items.filter((item) => {
     if (type === "cards") return item.cardId != null;
     if (type === "sealed") return item.sealedProductId != null;
@@ -94,7 +81,7 @@ export default async function PortfolioPage({
   });
 
   const enriched = filtered.map((item) => {
-    const marketPrice = marketPriceFor(item);
+    const marketPrice = marketPriceFor(item, cardPrices, sealedPrices);
     const cost = item.costPerUnit != null ? parseFloat(item.costPerUnit.toString()) : null;
     const unrealizedAbs = cost != null && marketPrice != null ? (marketPrice - cost) * item.quantity : null;
     const unrealizedPct = cost != null && cost !== 0 && marketPrice != null ? (marketPrice - cost) / cost : null;

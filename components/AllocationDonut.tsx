@@ -36,12 +36,18 @@ export function AllocationDonut({
   slices,
   total,
   animate = true,
+  large = false,
 }: {
   slices: Slice[];
   total: number;
   /** Gates the ring-in stagger -- false renders the rings invisible until the
       caller flips this once the chart has scrolled into view. */
   animate?: boolean;
+  /** Forces the desktop-sized ring/legend regardless of viewport width --
+      ChartZoom's one caller passes this true for the fullscreen mobile view,
+      since the sm: breakpoint alone wouldn't otherwise fire inside a
+      375px-wide overlay. */
+  large?: boolean;
 }) {
   const [hover, setHover] = useState<number | null>(null);
 
@@ -68,16 +74,28 @@ export function AllocationDonut({
   });
 
   return (
-    <div className="rounded-card border border-line bg-paper-raised p-4 sm:p-5">
-      <h3 className="font-display text-xl font-semibold tracking-tight text-ink">What it&rsquo;s made of</h3>
-      <p className="mt-0.5 font-body text-sm text-ink-muted">Where the value sits right now.</p>
+    <div className="flex h-full flex-col overflow-hidden rounded-card border border-line bg-paper-raised p-3 sm:p-5">
+      <h3
+        className={`font-display font-semibold tracking-tight text-ink ${large ? "text-xl" : "text-base sm:text-xl"}`}
+      >
+        What it&rsquo;s made of
+      </h3>
+      <p className={`mt-0.5 font-body text-sm text-ink-muted ${large ? "block" : "hidden sm:block"}`}>
+        Where the value sits right now.
+      </p>
 
-      <div className="mt-4 flex flex-col items-center gap-6 sm:flex-row sm:gap-8">
-        <div className="relative shrink-0" style={{ width: SIZE, height: SIZE }}>
+      {/* Side-by-side at every width (not just sm:flex-row) -- stacking the
+          legend below the rings was the single biggest space cost on the
+          fitted mobile dashboard screen. The ring box itself is sized
+          responsively (120px mobile, 240px at sm+) via Tailwind rather than
+          the SIZE constant, which stays the viewBox's internal coordinate
+          space only -- `large` forces the sm+ size even under 640px, for
+          ChartZoom's fullscreen view. */}
+      <div className={`mt-2 flex flex-1 items-center gap-3 ${large ? "mt-4 gap-8" : "sm:mt-4 sm:gap-8"}`}>
+        <div className={`relative shrink-0 ${large ? "size-[240px]" : "size-[120px] sm:size-[240px]"}`}>
           <svg
             viewBox={`0 0 ${SIZE} ${SIZE}`}
-            width={SIZE}
-            height={SIZE}
+            className="h-full w-full"
             role="img"
             aria-label="Collection value by category"
             onPointerLeave={() => setHover(null)}
@@ -120,27 +138,41 @@ export function AllocationDonut({
           </svg>
 
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-            <p className="font-data text-2xl font-medium text-ink">
+            <p className={`font-data font-medium text-ink ${large ? "text-2xl" : "text-base sm:text-2xl"}`}>
               {priceFormatter.format(active ? active.value : total)}
             </p>
-            <p className="mt-0.5 max-w-[110px] font-body text-xs text-ink-muted">
+            <p
+              className={`mt-0.5 font-body text-ink-muted ${
+                large ? "max-w-[110px] text-xs" : "max-w-[70px] text-[10px] sm:max-w-[110px] sm:text-xs"
+              }`}
+            >
               {active ? active.label : "in total"}
             </p>
           </div>
         </div>
 
-        <ul className="flex w-full flex-col gap-2.5">
+        <ul className={`flex w-full min-w-0 flex-col gap-1 ${large ? "gap-2.5" : "sm:gap-2.5"}`}>
           {segments.map(({ slice, i, color }) => (
             <li
               key={slice.label}
-              className="flex cursor-default items-center gap-3 rounded px-2 py-1.5 transition-colors hover:bg-paper"
+              className={`flex cursor-default items-center gap-2 rounded px-1 py-1 transition-colors hover:bg-paper ${
+                large ? "gap-3 px-2 py-1.5" : "sm:gap-3 sm:px-2 sm:py-1.5"
+              }`}
               onPointerEnter={() => setHover(i)}
               onPointerLeave={() => setHover(null)}
             >
               <span className="size-3 shrink-0 rounded-sm" style={{ background: color }} />
-              <span className="flex-1 truncate font-body text-sm text-ink">{slice.label}</span>
-              <span className="font-data text-sm text-ink-muted">{percentFormatter.format(slice.pct)}</span>
-              <span className="w-20 text-right font-data text-sm font-medium text-ink">
+              <span className={`flex-1 truncate font-body text-xs text-ink ${large ? "text-sm" : "sm:text-sm"}`}>
+                {slice.label}
+              </span>
+              <span className={`font-data text-sm text-ink-muted ${large ? "inline" : "hidden sm:inline"}`}>
+                {percentFormatter.format(slice.pct)}
+              </span>
+              <span
+                className={`text-right font-data text-xs font-medium text-ink ${
+                  large ? "w-20 text-sm" : "w-16 sm:w-20 sm:text-sm"
+                }`}
+              >
                 {priceFormatter.format(slice.value)}
               </span>
             </li>

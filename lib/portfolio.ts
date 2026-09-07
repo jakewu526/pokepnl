@@ -1,7 +1,8 @@
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { CONDITION_MULTIPLIERS, type Condition } from "@/lib/condition";
-import type { PricePoint } from "@/lib/cards";
+import { getLatestPrices, type PricePoint } from "@/lib/cards";
+import { getLatestSealedPrices } from "@/lib/sealed";
 import { buildSeries, priceAsOf, type PriceSeries } from "@/lib/price-series";
 
 export type PortfolioSummary = {
@@ -176,6 +177,82 @@ export function deltaOverDays(points: PricePoint[], days: number): { abs: number
   if (pastValue == null) return { abs: 0, pct: 0 };
   const abs = latest.price - pastValue;
   return { abs, pct: pastValue !== 0 ? abs / pastValue : 0 };
+}
+
+// Current per-unit market value of one holding, given the latest-price maps
+// from lib/cards.ts's getLatestPrices and lib/sealed.ts's
+// getLatestSealedPrices. Was copy-pasted identically in
+// app/dashboard/page.tsx and app/portfolio/page.tsx; both now call this, and
+// so does getHoldingsFor{Card,SealedProduct} below.
+export function marketPriceFor(
+  item: { cardId: string | null; sealedProductId: string | null; condition: string | null },
+  cardPrices: Map<string, { price: number }>,
+  sealedPrices: Map<string, { price: number }>
+): number | null {
+  if (item.cardId) {
+    const info = cardPrices.get(item.cardId);
+    if (!info) return null;
+    const multiplier = CONDITION_MULTIPLIERS[(item.condition as Condition) ?? "NM"] ?? 1;
+    return info.price * multiplier;
+  }
+  if (item.sealedProductId) {
+    return sealedPrices.get(item.sealedProductId)?.price ?? null;
+  }
+  return null;
+}
+
+export type Holding = {
+  id: string;
+  condition: string | null;
+  quantity: number;
+  cost: number | null;
+  marketPrice: number | null;
+  marketValue: number | null;
+  unrealized: number | null;
+  unrealizedPct: number | null;
+};
+
+type HoldingRow = { id: string; condition: string | null; quantity: number; costPerUnit: { toString(): string } | null };
+
+function toHolding(row: HoldingRow, marketPrice: number | null): Holding {
+  const cost = row.costPerUnit != null ? parseFloat(row.costPerUnit.toString()) : null;
+  const marketValue = marketPrice != null ? marketPrice * row.quantity : null;
+  const unrealized = cost != null && marketPrice != null ? (marketPrice - cost) * row.quantity : null;
+  const unrealizedPct = cost != null && cost !== 0 && marketPrice != null ? (marketPrice - cost) / cost : null;
+  return { id: row.id, condition: row.condition, quantity: row.quantity, cost, marketPrice, marketValue, unrealized, unrealizedPct };
+}
+
+// One row per (userId, cardId, condition) position -- a card can be held in
+// several conditions at once, so callers (HoldingPanel) must render the
+// whole list, not just the first entry.
+export async function getHoldingsForCard(userId: string, cardId: string): Promise<Holding[]> {
+  const rows = await prisma.collectionItem.findMany({
+    where: { userId, cardId },
+    select: { id: true, condition: true, quantity: true, costPerUnit: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (rows.length === 0) return [];
+
+  const prices = await getLatestPrices([cardId]);
+  const noSealedPrices = new Map<string, { price: number }>();
+  return rows.map((row) =>
+    toHolding(row, marketPriceFor({ cardId, sealedProductId: null, condition: row.condition }, prices, noSealedPrices))
+  );
+}
+
+export async function getHoldingsForSealedProduct(userId: string, sealedProductId: string): Promise<Holding[]> {
+  const rows = await prisma.collectionItem.findMany({
+    where: { userId, sealedProductId },
+    select: { id: true, condition: true, quantity: true, costPerUnit: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (rows.length === 0) return [];
+
+  const prices = await getLatestSealedPrices([sealedProductId]);
+  const noCardPrices = new Map<string, { price: number }>();
+  return rows.map((row) =>
+    toHolding(row, marketPriceFor({ cardId: null, sealedProductId, condition: row.condition }, noCardPrices, prices))
+  );
 }
 
 export async function getPortfolioData(userId: string): Promise<PortfolioData> {
