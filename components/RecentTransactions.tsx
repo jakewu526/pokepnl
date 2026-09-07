@@ -16,11 +16,6 @@ const priceFormatter = new Intl.NumberFormat("en-US", {
   currency: "USD",
 });
 
-function signedPrice(value: number): string {
-  const formatted = priceFormatter.format(Math.abs(value));
-  return value < 0 ? `-${formatted}` : `+${formatted}`;
-}
-
 function itemHref(itemType: "card" | "sealed", itemId: string | null): string | null {
   if (!itemId) return null;
   return itemType === "card" ? `/cards/${itemId}` : `/sealed/${itemId}`;
@@ -484,7 +479,6 @@ export function MergedTable({ rows, editable = false }: { rows: MergedRow[]; edi
             <th className="px-3 py-2 font-medium">Qty</th>
             <th className="px-3 py-2 font-medium">Price</th>
             <th className="px-3 py-2 font-medium">Where</th>
-            <th className="px-3 py-2 font-medium">Net profit</th>
           </tr>
         </thead>
         <tbody>
@@ -501,7 +495,6 @@ export function MergedTable({ rows, editable = false }: { rows: MergedRow[]; edi
             );
             const href = itemHref(item.itemType, item.itemId);
             const price = r.kind === "buy" ? r.row.costPerUnit : r.row.salePricePerUnit;
-            const profit = r.kind === "sell" ? r.row.profit : null;
 
             return (
               <tr key={`${r.kind}-${item.id}`} className="border-b border-line last:border-0">
@@ -585,13 +578,6 @@ export function MergedTable({ rows, editable = false }: { rows: MergedRow[]; edi
                   ) : (
                     marketplace ?? "—"
                   )}
-                </td>
-                <td
-                  className={`px-3 py-2 font-data font-medium ${
-                    profit == null ? "text-ink-muted" : profit < 0 ? "text-amber" : "text-emerald-strong"
-                  }`}
-                >
-                  {profit != null ? signedPrice(profit) : "—"}
                 </td>
               </tr>
             );

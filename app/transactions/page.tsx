@@ -16,10 +16,13 @@ import {
 
 const PAGE_SIZE = 30;
 
-type ViewMode = "separate" | "merged";
+// One flat toggle -- Buys / Sells / Merged -- rather than a "Buys & sells"
+// section that stacked both tables on the same page. Each mode shows exactly
+// one table, so switching never means scrolling past the other one.
+type Mode = "buy" | "sell" | "merged";
 
-function isViewMode(value: string | undefined): value is ViewMode {
-  return value === "separate" || value === "merged";
+function isMode(value: string | undefined): value is Mode {
+  return value === "buy" || value === "sell" || value === "merged";
 }
 
 function matchesQuery(itemName: string, q: string): boolean {
@@ -31,34 +34,22 @@ function withQuery(params: URLSearchParams, q: string): URLSearchParams {
   return params;
 }
 
-function pageHref(
-  q: string,
-  param: "buyPage" | "sellPage",
-  page: number,
-  otherParam: "buyPage" | "sellPage",
-  otherPage: number
-): string {
+// Shared by the mode pills and both pagers -- keeps whichever page each of
+// the three views was on when switching between them, so hopping from
+// "Buys" to "Sells" and back doesn't lose your spot in either.
+function modeHref(q: string, mode: Mode, buyPage: number, sellPage: number, mergedPage: number): string {
   const p = withQuery(new URLSearchParams(), q);
-  if (page > 1) p.set(param, String(page));
-  if (otherPage > 1) p.set(otherParam, String(otherPage));
+  if (mode !== "buy") p.set("view", mode);
+  if (buyPage > 1) p.set("buyPage", String(buyPage));
+  if (sellPage > 1) p.set("sellPage", String(sellPage));
+  if (mergedPage > 1) p.set("page", String(mergedPage));
   const qs = p.toString();
   return qs ? `/transactions?${qs}` : "/transactions";
 }
 
-function mergedPageHref(q: string, page: number): string {
-  const p = withQuery(new URLSearchParams(), q);
-  p.set("view", "merged");
-  if (page > 1) p.set("page", String(page));
-  return `/transactions?${p.toString()}`;
-}
-
-function viewHref(q: string, nextView: ViewMode): string {
-  const p = withQuery(new URLSearchParams(), q);
-  if (nextView === "merged") p.set("view", "merged");
-  const qs = p.toString();
-  return qs ? `/transactions?${qs}` : "/transactions";
-}
-
+// Rendered above *and* below the rows -- with a lot of history, the pager
+// used to live only at the bottom, so turning the page meant scrolling all
+// the way down first. Now the top copy is reachable without scrolling.
 function Pager({
   page,
   pageCount,
@@ -105,6 +96,12 @@ function Pager({
   );
 }
 
+const MODE_OPTIONS: { key: Mode; label: string }[] = [
+  { key: "buy", label: "Buys" },
+  { key: "sell", label: "Sells" },
+  { key: "merged", label: "Merged" },
+];
+
 export default async function TransactionsPage({
   searchParams,
 }: {
@@ -112,7 +109,7 @@ export default async function TransactionsPage({
 }) {
   const session = await verifySession();
   const params = await searchParams;
-  const view: ViewMode = isViewMode(params.view) ? params.view : "separate";
+  const mode: Mode = isMode(params.view) ? params.view : "buy";
   const q = (params.q ?? "").trim();
   const buyPage = Math.max(1, parseInt(params.buyPage ?? "1", 10) || 1);
   const sellPage = Math.max(1, parseInt(params.sellPage ?? "1", 10) || 1);
@@ -124,11 +121,6 @@ export default async function TransactionsPage({
     prisma.ebayAccount.findUnique({ where: { userId: session.userId } }),
   ]);
   const hasAny = purchaseCount > 0 || saleCount > 0;
-
-  const VIEW_OPTIONS: { key: ViewMode; label: string }[] = [
-    { key: "separate", label: "Buys & sells" },
-    { key: "merged", label: "Merged" },
-  ];
 
   return (
     <div className="flex min-h-full flex-col">
@@ -149,13 +141,13 @@ export default async function TransactionsPage({
               <>
                 <TransactionSearchBar initialQuery={q} />
                 <div role="group" className="flex items-center gap-1 rounded-full border border-line bg-paper-raised p-1">
-                  {VIEW_OPTIONS.map((opt) => (
+                  {MODE_OPTIONS.map((opt) => (
                     <Link
                       key={opt.key}
-                      href={viewHref(q, opt.key)}
-                      aria-pressed={view === opt.key}
+                      href={modeHref(q, opt.key, buyPage, sellPage, mergedPage)}
+                      aria-pressed={mode === opt.key}
                       className={`rounded-full px-3 py-1.5 font-body text-sm font-medium transition ${
-                        view === opt.key ? "bg-emerald text-paper-raised" : "text-ink-muted hover:text-ink"
+                        mode === opt.key ? "bg-emerald text-paper-raised" : "text-ink-muted hover:text-ink"
                       }`}
                     >
                       {opt.label}
@@ -175,10 +167,17 @@ export default async function TransactionsPage({
               Buy or sell an item from your portfolio to see it show up here.
             </p>
           </div>
-        ) : view === "merged" ? (
+        ) : mode === "merged" ? (
           <MergedView userId={session.userId} page={mergedPage} q={q} />
         ) : (
-          <SeparateView userId={session.userId} buyPage={buyPage} sellPage={sellPage} q={q} />
+          <SingleTypeView
+            userId={session.userId}
+            type={mode}
+            buyPage={buyPage}
+            sellPage={sellPage}
+            mergedPage={mergedPage}
+            q={q}
+          />
         )}
       </main>
 
@@ -194,15 +193,19 @@ export default async function TransactionsPage({
 // enough that this is simpler than pushing the name filter into a Prisma
 // `where` across two tables (PurchaseLot has no itemName of its own; it only
 // gets one by joining through card/sealedProduct).
-async function SeparateView({
+async function SingleTypeView({
   userId,
+  type,
   buyPage,
   sellPage,
+  mergedPage,
   q,
 }: {
   userId: string;
+  type: "buy" | "sell";
   buyPage: number;
   sellPage: number;
+  mergedPage: number;
   q: string;
 }) {
   const [allPurchases, allSales]: [PurchaseListItem[], TransactionListItem[]] = await Promise.all([
@@ -218,37 +221,40 @@ async function SeparateView({
   const buyPageRows = purchases.slice((buyPage - 1) * PAGE_SIZE, buyPage * PAGE_SIZE);
   const sellPageRows = sales.slice((sellPage - 1) * PAGE_SIZE, sellPage * PAGE_SIZE);
 
+  const count = type === "buy" ? purchases.length : sales.length;
+  const pageCount = type === "buy" ? buyPageCount : sellPageCount;
+  const page = type === "buy" ? buyPage : sellPage;
+  const href = (p: number) =>
+    type === "buy" ? modeHref(q, "buy", p, sellPage, mergedPage) : modeHref(q, "sell", buyPage, p, mergedPage);
+
   return (
-    <div className="flex flex-col gap-10">
-      <section>
-        <h2 className="mb-3 font-display text-lg font-semibold tracking-tight text-ink">
-          Buying {purchases.length > 0 && <span className="font-data text-sm font-normal text-ink-muted">({purchases.length})</span>}
-        </h2>
-        {buyPageRows.length > 0 ? (
+    <div>
+      <h2 className="mb-3 font-display text-lg font-semibold tracking-tight text-ink">
+        {type === "buy" ? "Buys" : "Sells"}{" "}
+        {count > 0 && <span className="font-data text-sm font-normal text-ink-muted">({count})</span>}
+      </h2>
+
+      {type === "buy" ? (
+        buyPageRows.length > 0 ? (
           <>
+            <Pager page={page} pageCount={pageCount} href={href} />
             <BuyTable purchases={buyPageRows} editable />
-            <Pager page={buyPage} pageCount={buyPageCount} href={(p) => pageHref(q, "buyPage", p, "sellPage", sellPage)} />
+            <Pager page={page} pageCount={pageCount} href={href} />
           </>
         ) : (
           <p className="font-body text-sm text-ink-muted">
             {q ? `No purchases match "${q}".` : "No purchases yet."}
           </p>
-        )}
-      </section>
-
-      <section>
-        <h2 className="mb-3 font-display text-lg font-semibold tracking-tight text-ink">
-          Selling {sales.length > 0 && <span className="font-data text-sm font-normal text-ink-muted">({sales.length})</span>}
-        </h2>
-        {sellPageRows.length > 0 ? (
-          <>
-            <SellTable transactions={sellPageRows} editable />
-            <Pager page={sellPage} pageCount={sellPageCount} href={(p) => pageHref(q, "sellPage", p, "buyPage", buyPage)} />
-          </>
-        ) : (
-          <p className="font-body text-sm text-ink-muted">{q ? `No sales match "${q}".` : "No sales yet."}</p>
-        )}
-      </section>
+        )
+      ) : sellPageRows.length > 0 ? (
+        <>
+          <Pager page={page} pageCount={pageCount} href={href} />
+          <SellTable transactions={sellPageRows} editable />
+          <Pager page={page} pageCount={pageCount} href={href} />
+        </>
+      ) : (
+        <p className="font-body text-sm text-ink-muted">{q ? `No sales match "${q}".` : "No sales yet."}</p>
+      )}
     </div>
   );
 }
@@ -265,13 +271,15 @@ async function MergedView({ userId, page, q }: { userId: string; page: number; q
 
   const pageCount = Math.max(1, Math.ceil(merged.length / PAGE_SIZE));
   const pageRows = merged.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const href = (p: number) => modeHref(q, "merged", 1, 1, p);
 
   return (
     <div>
       {pageRows.length > 0 ? (
         <>
+          <Pager page={page} pageCount={pageCount} href={href} />
           <MergedTable rows={pageRows} editable />
-          <Pager page={page} pageCount={pageCount} href={(p) => mergedPageHref(q, p)} />
+          <Pager page={page} pageCount={pageCount} href={href} />
         </>
       ) : (
         <p className="font-body text-sm text-ink-muted">{q ? `No transactions match "${q}".` : "No activity yet."}</p>
