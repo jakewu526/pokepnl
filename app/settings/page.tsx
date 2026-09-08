@@ -3,15 +3,20 @@ import { verifySession, getCurrentUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { AuthNav } from "@/components/AuthNav";
 import { EbayConnectionCard } from "@/components/EbayConnectionCard";
+import { FriendsSection } from "@/components/settings/FriendsSection";
 import { logout } from "@/app/actions/auth";
+import { getFriendsData } from "@/app/actions/friends";
+import { getPendingTradeOffers } from "@/app/actions/trades";
 
 export default async function SettingsPage() {
   const session = await verifySession();
-  const [ebayAccount, user] = await Promise.all([
+  const [ebayAccount, user, friendsData, pendingTrades] = await Promise.all([
     prisma.ebayAccount.findUnique({ where: { userId: session.userId } }),
     // verifySession() already guarantees this account has a name/email --
     // getCurrentUser() is cached, so this doesn't add a second query.
     getCurrentUser(),
+    getFriendsData(session.userId),
+    getPendingTradeOffers(),
   ]);
 
   return (
@@ -34,6 +39,11 @@ export default async function SettingsPage() {
             ebayUserId={ebayAccount?.ebayUserId ?? null}
             lastSyncedAt={ebayAccount?.lastSyncedAt?.toISOString() ?? null}
           />
+        </section>
+
+        <section className="mb-10">
+          <h2 className="mb-3 font-display text-lg font-semibold tracking-tight text-ink">Friends</h2>
+          <FriendsSection data={friendsData} pendingTrades={pendingTrades} />
         </section>
 
         <section className="mb-10">

@@ -426,6 +426,70 @@ export async function getClosedPositions(userId: string): Promise<ClosedPosition
   return closed;
 }
 
+export type TradeMovement = { itemName: string; quantity: number; imageUrl: string | null };
+
+export type TradeListItem = {
+  groupId: string;
+  source: "MANUAL" | "LIVE";
+  givenItems: TradeMovement[];
+  receivedItems: TradeMovement[];
+  // The friend's name for a LIVE trade, the freeform note for a MANUAL one,
+  // or null if neither was recorded.
+  counterpartyLabel: string | null;
+  tradedAt: string;
+};
+
+// The "trading" side of the transactions page -- no price/profit columns
+// anywhere, unlike getTransactionHistory/getAllPurchaseLots, since a trade
+// is never shown as a sale (see the plain-language rule in
+// app/actions/trades.ts). Trade stores one row per item *movement*
+// (direction GIVEN or RECEIVED), all rows from one logical trade event
+// sharing a groupId -- fetch everything for this user (same "fetch-all,
+// paginate in JS" convention already used for buys/sells/merged on the
+// Transactions page) and regroup into one visual event per groupId.
+// `limit`/`skip`, if passed, apply to the grouped events, not raw rows.
+export async function getTradeHistory(userId: string, limit?: number, skip?: number): Promise<TradeListItem[]> {
+  const rows = await prisma.trade.findMany({
+    where: { userId },
+    orderBy: { tradedAt: "desc" },
+    include: {
+      card: { select: { imageUrl: true } },
+      sealedProduct: { select: { imageUrl: true } },
+      counterpartyUser: { select: { name: true, email: true } },
+    },
+  });
+
+  const events = new Map<string, TradeListItem>();
+  for (const row of rows) {
+    let event = events.get(row.groupId);
+    if (!event) {
+      event = {
+        groupId: row.groupId,
+        source: row.source,
+        givenItems: [],
+        receivedItems: [],
+        counterpartyLabel: row.counterpartyUser ? row.counterpartyUser.name ?? row.counterpartyUser.email : row.counterpartyNote,
+        tradedAt: row.tradedAt.toISOString().slice(0, 10),
+      };
+      events.set(row.groupId, event);
+    }
+    const movement: TradeMovement = {
+      itemName: row.itemName,
+      quantity: row.quantity,
+      imageUrl: row.card?.imageUrl ?? row.sealedProduct?.imageUrl ?? null,
+    };
+    (row.direction === "GIVEN" ? event.givenItems : event.receivedItems).push(movement);
+  }
+
+  const sorted = Array.from(events.values()).sort((a, b) => (a.tradedAt < b.tradedAt ? 1 : a.tradedAt > b.tradedAt ? -1 : 0));
+  return skip != null || limit != null ? sorted.slice(skip ?? 0, limit != null ? (skip ?? 0) + limit : undefined) : sorted;
+}
+
+export async function getTradeCount(userId: string): Promise<number> {
+  const rows = await prisma.trade.findMany({ where: { userId }, select: { groupId: true }, distinct: ["groupId"] });
+  return rows.length;
+}
+
 export type PositionLedger = {
   purchases: PurchaseListItem[];
   sales: TransactionListItem[];

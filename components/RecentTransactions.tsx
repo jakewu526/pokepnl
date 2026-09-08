@@ -60,9 +60,9 @@ function EditableAmountCell({
 
   return (
     <div className="flex flex-col gap-0.5">
-      <div className="relative w-20">
+      <div className={`relative ${kind === "currency" ? "w-16 sm:w-20" : "w-10 sm:w-20"}`}>
         {kind === "currency" && (
-          <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 font-data text-xs text-ink-muted">
+          <span className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 font-data text-[10px] text-ink-muted sm:left-2 sm:text-xs">
             $
           </span>
         )}
@@ -76,8 +76,8 @@ function EditableAmountCell({
           onBlur={commit}
           disabled={pending}
           aria-label={kind === "quantity" ? "Quantity" : "Price"}
-          className={`h-7 w-full rounded-full border border-line bg-paper font-data text-xs text-ink outline-none focus:border-emerald disabled:opacity-60 ${
-            kind === "currency" ? "pl-5 pr-2" : "px-2"
+          className={`h-7 w-full rounded-full border border-line bg-paper font-data text-[10px] text-ink outline-none focus:border-emerald disabled:opacity-60 sm:text-xs ${
+            kind === "currency" ? "pl-4 pr-1 sm:pl-5 sm:pr-2" : "px-2"
           }`}
         />
       </div>
@@ -124,7 +124,7 @@ function EditableDateCell({
         onBlur={commit}
         disabled={pending}
         aria-label="Date"
-        className="h-7 w-36 rounded-full border border-line bg-paper px-2 font-data text-xs text-ink outline-none focus:border-emerald disabled:opacity-60"
+        className="h-7 w-20 rounded-full border border-line bg-paper px-1 font-data text-[10px] text-ink outline-none focus:border-emerald disabled:opacity-60 sm:w-36 sm:px-2 sm:text-xs"
       />
       {error && <p className="font-body text-[10px] text-amber">{error}</p>}
     </div>
@@ -208,7 +208,7 @@ function EditableMarketplaceCell({
 
 function RowThumb({ imageUrl, name }: { imageUrl: string | null; name: string }) {
   return (
-    <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded bg-line/40">
+    <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded bg-line/40 sm:h-10 sm:w-10">
       {imageUrl && <Image src={imageUrl} alt={name} fill sizes="40px" className="object-contain" />}
     </div>
   );
@@ -228,16 +228,16 @@ export function SellTable({
 
   return (
     <div className="overflow-x-auto rounded-card border border-line bg-paper-raised">
-      <table className="w-full min-w-[640px] text-left font-body text-sm">
+      <table className="w-full text-left font-body text-sm sm:min-w-[640px]">
         <thead>
           <tr className="border-b border-line text-xs text-ink-muted">
-            <th className="px-3 py-2 font-medium">Date</th>
-            <th className="px-3 py-2 font-medium">Item</th>
-            <th className="px-3 py-2 font-medium">Qty</th>
-            <th className="px-3 py-2 font-medium">Sold for</th>
-            <th className="px-3 py-2 font-medium">Fees</th>
-            <th className="px-3 py-2 font-medium">Shipping</th>
-            <th className="px-3 py-2 font-medium">Sold on</th>
+            <th className="px-1.5 py-2 sm:px-3 font-medium">Date</th>
+            <th className="px-1.5 py-2 sm:px-3 font-medium">Item</th>
+            <th className="px-1.5 py-2 sm:px-3 font-medium">Qty</th>
+            <th className="px-1.5 py-2 sm:px-3 font-medium">Sold for</th>
+            <th className="hidden px-1.5 py-2 sm:px-3 font-medium sm:table-cell">Fees</th>
+            <th className="hidden px-1.5 py-2 sm:px-3 font-medium sm:table-cell">Shipping</th>
+            <th className="hidden px-1.5 py-2 sm:px-3 font-medium sm:table-cell">Sold on</th>
           </tr>
         </thead>
         <tbody>
@@ -254,7 +254,7 @@ export function SellTable({
 
             return (
               <tr key={tx.id} className="border-b border-line last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-data text-xs text-ink-muted">
+                <td className="whitespace-nowrap px-1.5 py-2 sm:px-3 font-data text-xs text-ink-muted">
                   {editable ? (
                     <EditableDateCell
                       value={tx.soldAt}
@@ -264,8 +264,8 @@ export function SellTable({
                     tx.soldAt
                   )}
                 </td>
-                <td className="px-3 py-2 text-ink">
-                  <div className="flex items-center gap-2">
+                <td className="px-1.5 py-2 sm:px-3 text-ink">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
                     <RowThumb imageUrl={tx.imageUrl} name={tx.itemName} />
                     {href ? (
                       <Link href={href} className="hover:underline">
@@ -276,7 +276,7 @@ export function SellTable({
                     )}
                   </div>
                 </td>
-                <td className="px-3 py-2 font-data text-ink-muted">
+                <td className="px-1.5 py-2 sm:px-3 font-data text-ink-muted">
                   {editable ? (
                     <EditableAmountCell
                       value={tx.quantity}
@@ -287,7 +287,7 @@ export function SellTable({
                     tx.quantity
                   )}
                 </td>
-                <td className="px-3 py-2 font-data text-ink-muted">
+                <td className="px-1.5 py-2 sm:px-3 font-data text-ink-muted">
                   {editable ? (
                     <EditableAmountCell
                       value={tx.salePricePerUnit}
@@ -298,7 +298,7 @@ export function SellTable({
                     priceFormatter.format(tx.salePricePerUnit)
                   )}
                 </td>
-                <td className="px-3 py-2 font-data text-ink-muted">
+                <td className="hidden px-1.5 py-2 sm:px-3 font-data text-ink-muted sm:table-cell">
                   {(() => {
                     // A sale with no recorded fee (older rows, or a manual
                     // sale that predates fee tracking) shows the same 15%
@@ -324,7 +324,7 @@ export function SellTable({
                     );
                   })()}
                 </td>
-                <td className="px-3 py-2 font-data text-ink-muted">
+                <td className="hidden px-1.5 py-2 sm:px-3 font-data text-ink-muted sm:table-cell">
                   {editable ? (
                     <EditableAmountCell
                       value={tx.shippingCost ?? 0}
@@ -337,7 +337,7 @@ export function SellTable({
                     "—"
                   )}
                 </td>
-                <td className="px-3 py-2 font-data text-ink-muted">
+                <td className="hidden px-1.5 py-2 sm:px-3 font-data text-ink-muted sm:table-cell">
                   {editable ? (
                     <EditableMarketplaceCell
                       value={tx.marketplace}
@@ -369,14 +369,14 @@ export function BuyTable({
 
   return (
     <div className="overflow-x-auto rounded-card border border-line bg-paper-raised">
-      <table className="w-full min-w-[420px] text-left font-body text-sm">
+      <table className="w-full text-left font-body text-sm sm:min-w-[420px]">
         <thead>
           <tr className="border-b border-line text-xs text-ink-muted">
-            <th className="px-3 py-2 font-medium">Date</th>
-            <th className="px-3 py-2 font-medium">Item</th>
-            <th className="px-3 py-2 font-medium">Qty</th>
-            <th className="px-3 py-2 font-medium">Paid</th>
-            <th className="px-3 py-2 font-medium">Bought from</th>
+            <th className="px-1.5 py-2 sm:px-3 font-medium">Date</th>
+            <th className="px-1.5 py-2 sm:px-3 font-medium">Item</th>
+            <th className="px-1.5 py-2 sm:px-3 font-medium">Qty</th>
+            <th className="px-1.5 py-2 sm:px-3 font-medium">Paid</th>
+            <th className="hidden px-1.5 py-2 sm:px-3 font-medium sm:table-cell">Bought from</th>
           </tr>
         </thead>
         <tbody>
@@ -393,7 +393,7 @@ export function BuyTable({
 
             return (
               <tr key={p.id} className="border-b border-line last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-data text-xs text-ink-muted">
+                <td className="whitespace-nowrap px-1.5 py-2 sm:px-3 font-data text-xs text-ink-muted">
                   {editable ? (
                     <EditableDateCell
                       value={p.purchasedAt}
@@ -403,8 +403,8 @@ export function BuyTable({
                     p.purchasedAt
                   )}
                 </td>
-                <td className="px-3 py-2 text-ink">
-                  <div className="flex items-center gap-2">
+                <td className="px-1.5 py-2 sm:px-3 text-ink">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
                     <RowThumb imageUrl={p.imageUrl} name={p.itemName} />
                     {href ? (
                       <Link href={href} className="hover:underline">
@@ -415,7 +415,7 @@ export function BuyTable({
                     )}
                   </div>
                 </td>
-                <td className="px-3 py-2 font-data text-ink-muted">
+                <td className="px-1.5 py-2 sm:px-3 font-data text-ink-muted">
                   {editable ? (
                     <EditableAmountCell
                       value={p.quantity}
@@ -426,7 +426,7 @@ export function BuyTable({
                     p.quantity
                   )}
                 </td>
-                <td className="px-3 py-2 font-data text-ink-muted">
+                <td className="px-1.5 py-2 sm:px-3 font-data text-ink-muted">
                   {editable ? (
                     <EditableAmountCell
                       value={p.costPerUnit ?? 0}
@@ -439,7 +439,7 @@ export function BuyTable({
                     "—"
                   )}
                 </td>
-                <td className="px-3 py-2 font-data text-ink-muted">
+                <td className="hidden px-1.5 py-2 sm:px-3 font-data text-ink-muted sm:table-cell">
                   {editable ? (
                     <EditableMarketplaceCell
                       value={p.marketplace}
@@ -470,15 +470,15 @@ export function MergedTable({ rows, editable = false }: { rows: MergedRow[]; edi
 
   return (
     <div className="overflow-x-auto rounded-card border border-line bg-paper-raised">
-      <table className="w-full min-w-[640px] text-left font-body text-sm">
+      <table className="w-full text-left font-body text-sm sm:min-w-[640px]">
         <thead>
           <tr className="border-b border-line text-xs text-ink-muted">
-            <th className="px-3 py-2 font-medium">Date</th>
-            <th className="px-3 py-2 font-medium">Type</th>
-            <th className="px-3 py-2 font-medium">Item</th>
-            <th className="px-3 py-2 font-medium">Qty</th>
-            <th className="px-3 py-2 font-medium">Price</th>
-            <th className="px-3 py-2 font-medium">Where</th>
+            <th className="px-1.5 py-2 sm:px-3 font-medium">Date</th>
+            <th className="px-1.5 py-2 sm:px-3 font-medium">Type</th>
+            <th className="px-1.5 py-2 sm:px-3 font-medium">Item</th>
+            <th className="px-1.5 py-2 sm:px-3 font-medium">Qty</th>
+            <th className="px-1.5 py-2 sm:px-3 font-medium">Price</th>
+            <th className="hidden px-1.5 py-2 sm:px-3 font-medium sm:table-cell">Where</th>
           </tr>
         </thead>
         <tbody>
@@ -498,7 +498,7 @@ export function MergedTable({ rows, editable = false }: { rows: MergedRow[]; edi
 
             return (
               <tr key={`${r.kind}-${item.id}`} className="border-b border-line last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-data text-xs text-ink-muted">
+                <td className="whitespace-nowrap px-1.5 py-2 sm:px-3 font-data text-xs text-ink-muted">
                   {editable ? (
                     <EditableDateCell
                       value={r.date}
@@ -512,17 +512,17 @@ export function MergedTable({ rows, editable = false }: { rows: MergedRow[]; edi
                     r.date
                   )}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-1 py-2 sm:px-3">
                   <span
-                    className={`rounded-full px-2 py-0.5 font-body text-[11px] font-medium ${
+                    className={`rounded-full px-1.5 py-0.5 font-body text-[11px] font-medium sm:px-2 ${
                       r.kind === "buy" ? "bg-emerald/10 text-emerald-strong" : "bg-amber-tint text-amber"
                     }`}
                   >
                     {r.kind === "buy" ? "Buy" : "Sell"}
                   </span>
                 </td>
-                <td className="px-3 py-2 text-ink">
-                  <div className="flex items-center gap-2">
+                <td className="px-1.5 py-2 sm:px-3 text-ink">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
                     <RowThumb imageUrl={item.imageUrl} name={item.itemName} />
                     {href ? (
                       <Link href={href} className="hover:underline">
@@ -533,7 +533,7 @@ export function MergedTable({ rows, editable = false }: { rows: MergedRow[]; edi
                     )}
                   </div>
                 </td>
-                <td className="px-3 py-2 font-data text-ink-muted">
+                <td className="px-1.5 py-2 sm:px-3 font-data text-ink-muted">
                   {editable ? (
                     <EditableAmountCell
                       value={item.quantity}
@@ -548,7 +548,7 @@ export function MergedTable({ rows, editable = false }: { rows: MergedRow[]; edi
                     item.quantity
                   )}
                 </td>
-                <td className="px-3 py-2 font-data text-ink-muted">
+                <td className="px-1.5 py-2 sm:px-3 font-data text-ink-muted">
                   {editable ? (
                     <EditableAmountCell
                       value={price ?? 0}
@@ -565,7 +565,7 @@ export function MergedTable({ rows, editable = false }: { rows: MergedRow[]; edi
                     "—"
                   )}
                 </td>
-                <td className="px-3 py-2 font-data text-ink-muted">
+                <td className="hidden px-1.5 py-2 sm:px-3 font-data text-ink-muted sm:table-cell">
                   {editable ? (
                     <EditableMarketplaceCell
                       value={marketplace}

@@ -35,14 +35,11 @@ function ChartIcon({ className }: IconProps) {
   );
 }
 
-function StarIcon({ className }: IconProps) {
+function ReceiptIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={2}>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12 20.5s-7.5-4.6-10-9.3C.5 8 2 4.5 5.5 4c2.1-.3 4 .8 6.5 3.4C14.5 4.8 16.4 3.7 18.5 4 22 4.5 23.5 8 22 11.2 19.5 15.9 12 20.5 12 20.5Z"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 3h12v18l-2.5-1.5L13 21l-2.5-1.5L8 21l-2-1.5V3Z" />
+      <path strokeLinecap="round" d="M8.5 8h7M8.5 12h7M8.5 16h4" />
     </svg>
   );
 }
@@ -69,7 +66,7 @@ const LEFT_TABS: TabItem[] = [
 
 const RIGHT_TABS: TabItem[] = [
   { key: "portfolio", label: "Portfolio", href: "/portfolio", icon: ChartIcon, notch: "left" },
-  { key: "watchlist", label: "Watchlist", href: "/watchlist", icon: StarIcon },
+  { key: "transactions", label: "Activity", href: "/transactions", icon: ReceiptIcon },
 ];
 
 // Circle is h-20/w-20 -> 40px radius. The tile sits with zero gap against
@@ -113,11 +110,13 @@ const HIDDEN_ON = ["/login", "/signup", "/welcome"];
 
 /**
  * Fixed bottom tab bar for narrow (phone-width) viewports -- hidden at the
- * `md` breakpoint and up. Mounted from the root layout, so it's live on
- * every page; app/layout.tsx also pads the body (pb-24 md:pb-0) so page
- * content doesn't sit underneath it.
+ * `md` breakpoint and up. Mounted from components/AppChrome.tsx (itself
+ * mounted from the root layout), so it's live on every page; app/layout.tsx
+ * also pads the body (pb-24 md:pb-0) so page content doesn't sit underneath
+ * it. `onPrimaryAction` opens the Trade/Sell overlay (or redirects to login
+ * for a signed-out visitor) -- see AppChrome for that decision.
  */
-export function MobileTabBar() {
+export function MobileTabBar({ onPrimaryAction }: { onPrimaryAction: () => void }) {
   const pathname = usePathname();
   if (HIDDEN_ON.includes(pathname)) return null;
 
@@ -143,7 +142,8 @@ export function MobileTabBar() {
             exactly one radius away from the circle's true center. */}
         <button
           type="button"
-          aria-label="Primary action"
+          aria-label="Trade or sell"
+          onClick={onPrimaryAction}
           className="mx-[-6px] flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-emerald text-paper-raised shadow-lg transition-transform active:scale-95"
         >
           <Image src="/pokepnl-mark.png" alt="" width={240} height={184} className="h-12 w-auto" priority />

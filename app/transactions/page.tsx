@@ -5,24 +5,28 @@ import { AuthNav } from "@/components/AuthNav";
 import { TransactionSearchBar } from "@/components/TransactionSearchBar";
 import { EbaySyncButton } from "@/components/EbaySyncButton";
 import { BuyTable, SellTable, MergedTable, type MergedRow } from "@/components/RecentTransactions";
+import { TradeHistoryTable } from "@/components/trade/TradeHistoryTable";
 import {
   getAllPurchaseLots,
   getPurchaseLotCount,
   getTransactionHistory,
   getTransactionCount,
+  getTradeHistory,
+  getTradeCount,
   type PurchaseListItem,
   type TransactionListItem,
 } from "@/lib/pnl";
 
 const PAGE_SIZE = 30;
 
-// One flat toggle -- Buys / Sells / Merged -- rather than a "Buys & sells"
-// section that stacked both tables on the same page. Each mode shows exactly
-// one table, so switching never means scrolling past the other one.
-type Mode = "buy" | "sell" | "merged";
+// One flat toggle -- Buys / Sells / Trades / Merged -- rather than a
+// "Buys & sells" section that stacked every table on the same page. Each
+// mode shows exactly one table, so switching never means scrolling past the
+// others.
+type Mode = "buy" | "sell" | "trade" | "merged";
 
 function isMode(value: string | undefined): value is Mode {
-  return value === "buy" || value === "sell" || value === "merged";
+  return value === "buy" || value === "sell" || value === "trade" || value === "merged";
 }
 
 function matchesQuery(itemName: string, q: string): boolean {
@@ -34,14 +38,22 @@ function withQuery(params: URLSearchParams, q: string): URLSearchParams {
   return params;
 }
 
-// Shared by the mode pills and both pagers -- keeps whichever page each of
-// the three views was on when switching between them, so hopping from
-// "Buys" to "Sells" and back doesn't lose your spot in either.
-function modeHref(q: string, mode: Mode, buyPage: number, sellPage: number, mergedPage: number): string {
+// Shared by the mode pills and every pager -- keeps whichever page each of
+// the views was on when switching between them, so hopping from "Buys" to
+// "Sells" and back doesn't lose your spot in either.
+function modeHref(
+  q: string,
+  mode: Mode,
+  buyPage: number,
+  sellPage: number,
+  tradePage: number,
+  mergedPage: number
+): string {
   const p = withQuery(new URLSearchParams(), q);
   if (mode !== "buy") p.set("view", mode);
   if (buyPage > 1) p.set("buyPage", String(buyPage));
   if (sellPage > 1) p.set("sellPage", String(sellPage));
+  if (tradePage > 1) p.set("tradePage", String(tradePage));
   if (mergedPage > 1) p.set("page", String(mergedPage));
   const qs = p.toString();
   return qs ? `/transactions?${qs}` : "/transactions";
@@ -99,13 +111,21 @@ function Pager({
 const MODE_OPTIONS: { key: Mode; label: string }[] = [
   { key: "buy", label: "Buys" },
   { key: "sell", label: "Sells" },
+  { key: "trade", label: "Trades" },
   { key: "merged", label: "Merged" },
 ];
 
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ buyPage?: string; sellPage?: string; page?: string; view?: string; q?: string }>;
+  searchParams: Promise<{
+    buyPage?: string;
+    sellPage?: string;
+    tradePage?: string;
+    page?: string;
+    view?: string;
+    q?: string;
+  }>;
 }) {
   const session = await verifySession();
   const params = await searchParams;
@@ -113,14 +133,16 @@ export default async function TransactionsPage({
   const q = (params.q ?? "").trim();
   const buyPage = Math.max(1, parseInt(params.buyPage ?? "1", 10) || 1);
   const sellPage = Math.max(1, parseInt(params.sellPage ?? "1", 10) || 1);
+  const tradePage = Math.max(1, parseInt(params.tradePage ?? "1", 10) || 1);
   const mergedPage = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
 
-  const [purchaseCount, saleCount, ebayAccount] = await Promise.all([
+  const [purchaseCount, saleCount, tradeCount, ebayAccount] = await Promise.all([
     getPurchaseLotCount(session.userId),
     getTransactionCount(session.userId),
+    getTradeCount(session.userId),
     prisma.ebayAccount.findUnique({ where: { userId: session.userId } }),
   ]);
-  const hasAny = purchaseCount > 0 || saleCount > 0;
+  const hasAny = purchaseCount > 0 || saleCount > 0 || tradeCount > 0;
 
   return (
     <div className="flex min-h-full flex-col">
@@ -144,7 +166,7 @@ export default async function TransactionsPage({
                   {MODE_OPTIONS.map((opt) => (
                     <Link
                       key={opt.key}
-                      href={modeHref(q, opt.key, buyPage, sellPage, mergedPage)}
+                      href={modeHref(q, opt.key, buyPage, sellPage, tradePage, mergedPage)}
                       aria-pressed={mode === opt.key}
                       className={`rounded-full px-3 py-1.5 font-body text-sm font-medium transition ${
                         mode === opt.key ? "bg-emerald text-paper-raised" : "text-ink-muted hover:text-ink"
@@ -169,12 +191,15 @@ export default async function TransactionsPage({
           </div>
         ) : mode === "merged" ? (
           <MergedView userId={session.userId} page={mergedPage} q={q} />
+        ) : mode === "trade" ? (
+          <TradeView userId={session.userId} page={tradePage} buyPage={buyPage} sellPage={sellPage} mergedPage={mergedPage} q={q} />
         ) : (
           <SingleTypeView
             userId={session.userId}
             type={mode}
             buyPage={buyPage}
             sellPage={sellPage}
+            tradePage={tradePage}
             mergedPage={mergedPage}
             q={q}
           />
@@ -183,6 +208,12 @@ export default async function TransactionsPage({
 
       <footer className="border-t border-line px-4 py-4 text-center font-data text-xs text-ink-muted sm:px-6">
         {purchaseCount} purchase{purchaseCount === 1 ? "" : "s"} · {saleCount} sale{saleCount === 1 ? "" : "s"}
+        {tradeCount > 0 && (
+          <>
+            {" "}
+            · {tradeCount} trade{tradeCount === 1 ? "" : "s"}
+          </>
+        )}
       </footer>
     </div>
   );
@@ -198,6 +229,7 @@ async function SingleTypeView({
   type,
   buyPage,
   sellPage,
+  tradePage,
   mergedPage,
   q,
 }: {
@@ -205,6 +237,7 @@ async function SingleTypeView({
   type: "buy" | "sell";
   buyPage: number;
   sellPage: number;
+  tradePage: number;
   mergedPage: number;
   q: string;
 }) {
@@ -225,7 +258,9 @@ async function SingleTypeView({
   const pageCount = type === "buy" ? buyPageCount : sellPageCount;
   const page = type === "buy" ? buyPage : sellPage;
   const href = (p: number) =>
-    type === "buy" ? modeHref(q, "buy", p, sellPage, mergedPage) : modeHref(q, "sell", buyPage, p, mergedPage);
+    type === "buy"
+      ? modeHref(q, "buy", p, sellPage, tradePage, mergedPage)
+      : modeHref(q, "sell", buyPage, p, tradePage, mergedPage);
 
   return (
     <div>
@@ -271,7 +306,7 @@ async function MergedView({ userId, page, q }: { userId: string; page: number; q
 
   const pageCount = Math.max(1, Math.ceil(merged.length / PAGE_SIZE));
   const pageRows = merged.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const href = (p: number) => modeHref(q, "merged", 1, 1, p);
+  const href = (p: number) => modeHref(q, "merged", 1, 1, 1, p);
 
   return (
     <div>
@@ -283,6 +318,52 @@ async function MergedView({ userId, page, q }: { userId: string; page: number; q
         </>
       ) : (
         <p className="font-body text-sm text-ink-muted">{q ? `No transactions match "${q}".` : "No activity yet."}</p>
+      )}
+    </div>
+  );
+}
+
+function matchesTradeQuery(t: { givenItems: { itemName: string }[]; receivedItems: { itemName: string }[] }, q: string): boolean {
+  return t.givenItems.some((i) => matchesQuery(i.itemName, q)) || t.receivedItems.some((i) => matchesQuery(i.itemName, q));
+}
+
+async function TradeView({
+  userId,
+  page,
+  buyPage,
+  sellPage,
+  mergedPage,
+  q,
+}: {
+  userId: string;
+  page: number;
+  buyPage: number;
+  sellPage: number;
+  mergedPage: number;
+  q: string;
+}) {
+  const allTrades = await getTradeHistory(userId);
+  const trades = q ? allTrades.filter((t) => matchesTradeQuery(t, q)) : allTrades;
+
+  const pageCount = Math.max(1, Math.ceil(trades.length / PAGE_SIZE));
+  const pageRows = trades.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const href = (p: number) => modeHref(q, "trade", buyPage, sellPage, p, mergedPage);
+
+  return (
+    <div>
+      <h2 className="mb-3 font-display text-lg font-semibold tracking-tight text-ink">
+        Trades{" "}
+        {trades.length > 0 && <span className="font-data text-sm font-normal text-ink-muted">({trades.length})</span>}
+      </h2>
+
+      {pageRows.length > 0 ? (
+        <>
+          <Pager page={page} pageCount={pageCount} href={href} />
+          <TradeHistoryTable trades={pageRows} />
+          <Pager page={page} pageCount={pageCount} href={href} />
+        </>
+      ) : (
+        <p className="font-body text-sm text-ink-muted">{q ? `No trades match "${q}".` : "No trades yet."}</p>
       )}
     </div>
   );

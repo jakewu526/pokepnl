@@ -46,6 +46,7 @@ model Card {
   watchlistItems  WatchlistItem[]
   latestPrice     CardLatestPrice?
   purchaseLots    PurchaseLot[]
+  trades          Trade[]         @relation("TradeCard")
 
   @@index([setId, number])
   @@index([name])
@@ -74,6 +75,11 @@ model User {
   passwordHash String?
   googleId     String?  @unique
   name         String?
+  // Shareable code so another account can send a friend request without
+  // needing an email/username lookup. Nullable -- generated lazily the first
+  // time a user opens the Friends section (see getOrCreateFriendCode), not
+  // backfilled for existing accounts.
+  friendCode   String?  @unique
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -82,6 +88,146 @@ model User {
   watchlistItems  WatchlistItem[]
   purchaseLots    PurchaseLot[]
   ebayAccount     EbayAccount?
+
+  friendshipsSent      Friendship[] @relation("FriendshipRequester")
+  friendshipsReceived  Friendship[] @relation("FriendshipAddressee")
+  tradeOffersSent      TradeOffer[] @relation("TradeOfferProposer")
+  tradeOffersReceived  TradeOffer[] @relation("TradeOfferRecipient")
+  trades               Trade[]      @relation("TradeUser")
+  tradesAsCounterparty Trade[]      @relation("TradeCounterparty")
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+}
+
+// One directed row per request. Decline/cancel delete the row entirely
+// (no DECLINED status) so a person can re-request later without fighting
+// the @@unique constraint below -- friendship has no messaging/history
+// requirement beyond "are we friends right now."
+model Friendship {
+  id          String           @id @default(cuid())
+  requesterId String
+  addresseeId String
+  status      FriendshipStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  respondedAt DateTime?
+
+  requester User @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
+}
+
+enum TradeOfferStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+// Ephemeral, frequently-polled negotiation state for a live in-app trade --
+// kept separate from Trade (the immutable history log) because its shape
+// (mutated on every poll tick) doesn't belong in a history table. Each side
+// can offer multiple items (see TradeOfferItem below); "nothing picked yet"
+// is simply zero rows for that side rather than a nullable placeholder.
+model TradeOffer {
+  id     String           @id @default(cuid())
+  status TradeOfferStatus @default(PENDING)
+
+  proposerId        String
+  proposerConfirmed Boolean @default(false)
+
+  recipientId        String
+  recipientConfirmed Boolean @default(false)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  proposer  User             @relation("TradeOfferProposer", fields: [proposerId], references: [id], onDelete: Cascade)
+  recipient User             @relation("TradeOfferRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  items     TradeOfferItem[]
+
+  @@index([recipientId, status])
+  @@index([proposerId, status])
+}
+
+enum TradeOfferSide {
+  PROPOSER
+  RECIPIENT
+}
+
+// One row per item one side has put on the table. onDelete: Cascade on
+// collectionItemId (unlike the old SetNull placeholder design) is fine here
+// -- confirmTradeOffer re-validates every row's ownership/quantity before
+// executing the swap and cancels if something no longer lines up, so a
+// vanished item just means fewer rows to re-validate, not a dangling null.
+model TradeOfferItem {
+  id               String         @id @default(cuid())
+  tradeOfferId     String
+  side             TradeOfferSide
+  collectionItemId String
+  quantity         Int            @default(1)
+  createdAt        DateTime       @default(now())
+
+  tradeOffer     TradeOffer     @relation(fields: [tradeOfferId], references: [id], onDelete: Cascade)
+  collectionItem CollectionItem @relation(fields: [collectionItemId], references: [id], onDelete: Cascade)
+
+  @@unique([tradeOfferId, side, collectionItemId])
+  @@index([tradeOfferId, side])
+}
+
+enum TradeSource {
+  MANUAL
+  LIVE
+}
+
+enum TradeDirection {
+  GIVEN
+  RECEIVED
+}
+
+// Unified trade history for both sources: one row per item *movement*
+// (either given or received), tagged with a groupId shared by every row
+// that belongs to one logical trade event *for this user* -- a manual trade
+// with 2 given + 3 received items writes 5 rows under one groupId; a live
+// trade writes a separate groupId per participant (their own given+received
+// bundle). getTradeHistory groups rows back into one visual event per
+// groupId. No price/profit columns anywhere on this model -- a trade is
+// never shown as a sale (see the plain-language rule in app/actions/trades.ts).
+model Trade {
+  id        String         @id @default(cuid())
+  userId    String
+  source    TradeSource
+  direction TradeDirection
+  groupId   String
+
+  cardId          String?
+  sealedProductId String?
+  condition       String?
+  quantity        Int
+  itemName        String
+
+  // MANUAL only -- freeform, e.g. "Traded with my friend Sam at school."
+  counterpartyNote String?
+  // LIVE only -- the friend's account.
+  counterpartyUserId String?
+  // LIVE only -- links both participants' rows back to the same TradeOffer.
+  tradeOfferId String?
+
+  tradedAt DateTime @default(now())
+
+  user             User           @relation("TradeUser", fields: [userId], references: [id], onDelete: Cascade)
+  counterpartyUser User?          @relation("TradeCounterparty", fields: [counterpartyUserId], references: [id], onDelete: SetNull)
+  card             Card?          @relation("TradeCard", fields: [cardId], references: [id], onDelete: SetNull)
+  sealedProduct    SealedProduct? @relation("TradeSealed", fields: [sealedProductId], references: [id], onDelete: SetNull)
+
+  @@index([userId, groupId])
+  @@index([userId, tradedAt])
+  @@index([tradeOfferId])
 }
 
 // One user's connected eBay seller account (OAuth "authorization code" grant,
@@ -123,6 +269,8 @@ model CollectionItem {
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   card          Card?          @relation(fields: [cardId], references: [id])
   sealedProduct SealedProduct? @relation(fields: [sealedProductId], references: [id])
+
+  tradeOfferItems TradeOfferItem[]
 
   @@unique([userId, cardId, condition])
   @@unique([userId, sealedProductId, condition])
@@ -246,6 +394,7 @@ model SealedProduct {
   transactions    Transaction[]
   watchlistItems  WatchlistItem[]
   purchaseLots    PurchaseLot[]
+  trades          Trade[]          @relation("TradeSealed")
 
   @@unique([setId, name])
   @@index([name])

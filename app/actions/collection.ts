@@ -1,10 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { verifySession } from "@/lib/dal";
 import { getPositionLedger, type PositionLedger } from "@/lib/pnl";
 import { recomputePosition } from "@/lib/position";
+import { getMyCollectionForTrade, type TradeableItem } from "@/app/actions/trades";
+import { getLatestPrices } from "@/lib/cards";
+import { getLatestSealedPrices } from "@/lib/sealed";
+import { marketPriceFor } from "@/lib/portfolio";
 
 // Parses a "YYYY-MM-DD" <input type="date"> value into a Date. Anchored to
 // UTC midnight (not local midnight) so it round-trips exactly through the
@@ -264,6 +269,59 @@ export async function deletePosition(collectionItemId: string): Promise<void> {
   revalidatePath("/transactions");
 }
 
+type SaleInput = {
+  collectionItemId: string;
+  quantitySold: number;
+  salePricePerUnit: number;
+  feesTotal?: number;
+  shippingCost?: number;
+  marketplace?: string;
+};
+
+// Shared by sellCollectionItem (single item, from SellOrDeleteButton on
+// /portfolio) and sellMultipleItems (the green button's bulk sell flow) --
+// extracted so both write identically instead of one reimplementing the
+// other's profit/ledger logic.
+async function sellOneItem(tx: Prisma.TransactionClient, userId: string, sale: SaleInput): Promise<void> {
+  const item = await tx.collectionItem.findFirst({
+    where: { id: sale.collectionItemId, userId },
+    include: { card: { select: { name: true } }, sealedProduct: { select: { name: true } } },
+  });
+  if (!item) return;
+
+  const quantity = Math.max(1, Math.min(sale.quantitySold, item.quantity));
+  const costPerUnit = item.costPerUnit != null ? parseFloat(item.costPerUnit.toString()) : null;
+  // Fees and shipping are per-SALE totals, not per-unit.
+  const profit =
+    costPerUnit != null
+      ? (sale.salePricePerUnit - costPerUnit) * quantity - (sale.feesTotal ?? 0) - (sale.shippingCost ?? 0)
+      : null;
+  const itemName = item.card?.name ?? item.sealedProduct?.name ?? "Unknown item";
+
+  await tx.transaction.create({
+    data: {
+      userId,
+      cardId: item.cardId,
+      sealedProductId: item.sealedProductId,
+      itemName,
+      condition: item.condition,
+      quantity,
+      costPerUnit,
+      salePricePerUnit: sale.salePricePerUnit,
+      feesTotal: sale.feesTotal ?? null,
+      shippingCost: sale.shippingCost ?? null,
+      profit,
+      marketplace: sale.marketplace ?? null,
+    },
+  });
+
+  await recomputePosition(tx, userId, {
+    cardId: item.cardId,
+    sealedProductId: item.sealedProductId,
+    condition: item.condition,
+  });
+}
+
 export async function sellCollectionItem(
   collectionItemId: string,
   quantitySold: number,
@@ -274,47 +332,58 @@ export async function sellCollectionItem(
 ): Promise<void> {
   const session = await verifySession();
 
+  await prisma.$transaction((tx) =>
+    sellOneItem(tx, session.userId, { collectionItemId, quantitySold, salePricePerUnit, feesTotal, shippingCost, marketplace })
+  );
+
+  revalidatePath("/dashboard");
+  revalidatePath("/portfolio");
+  revalidatePath("/transactions");
+}
+
+// The green button's bulk sell flow -- one row per selected item, each with
+// its own quantity/price/marketplace/fees, all written in one transaction
+// (same "loop inside one $transaction" template batchAddToCollection uses).
+export async function sellMultipleItems(sales: SaleInput[]): Promise<{ error?: string }> {
+  const session = await verifySession();
+
+  if (!sales?.length) return { error: "Pick at least one item to sell." };
+  for (const sale of sales) {
+    if (!Number.isFinite(sale.quantitySold) || sale.quantitySold < 1) {
+      return { error: "Quantity sold must be at least 1." };
+    }
+    if (!Number.isFinite(sale.salePricePerUnit) || sale.salePricePerUnit < 0) {
+      return { error: "Sale price must be zero or more." };
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
-    const item = await tx.collectionItem.findFirst({
-      where: { id: collectionItemId, userId: session.userId },
-      include: { card: { select: { name: true } }, sealedProduct: { select: { name: true } } },
-    });
-    if (!item) return;
-
-    const quantity = Math.max(1, Math.min(quantitySold, item.quantity));
-    const costPerUnit = item.costPerUnit != null ? parseFloat(item.costPerUnit.toString()) : null;
-    // Fees and shipping are per-SALE totals, not per-unit.
-    const profit =
-      costPerUnit != null
-        ? (salePricePerUnit - costPerUnit) * quantity - (feesTotal ?? 0) - (shippingCost ?? 0)
-        : null;
-    const itemName = item.card?.name ?? item.sealedProduct?.name ?? "Unknown item";
-
-    await tx.transaction.create({
-      data: {
-        userId: session.userId,
-        cardId: item.cardId,
-        sealedProductId: item.sealedProductId,
-        itemName,
-        condition: item.condition,
-        quantity,
-        costPerUnit,
-        salePricePerUnit,
-        feesTotal: feesTotal ?? null,
-        shippingCost: shippingCost ?? null,
-        profit,
-        marketplace: marketplace ?? null,
-      },
-    });
-
-    await recomputePosition(tx, session.userId, {
-      cardId: item.cardId,
-      sealedProductId: item.sealedProductId,
-      condition: item.condition,
-    });
+    for (const sale of sales) {
+      await sellOneItem(tx, session.userId, sale);
+    }
   });
 
   revalidatePath("/dashboard");
   revalidatePath("/portfolio");
   revalidatePath("/transactions");
+  return {};
+}
+
+export type SellableItem = TradeableItem & { marketPrice: number | null };
+
+// Feeds the sell picker's review table -- same market-price computation
+// app/portfolio/page.tsx already does per item, reused here as a read action
+// since the sell modal can be opened from anywhere via the green button
+// overlay, not just from a page that already loaded /portfolio.
+export async function getMyCollectionForSale(): Promise<SellableItem[]> {
+  const items = await getMyCollectionForTrade();
+
+  const cardIds = items.filter((i) => i.cardId).map((i) => i.cardId!);
+  const sealedIds = items.filter((i) => i.sealedProductId).map((i) => i.sealedProductId!);
+  const [cardPrices, sealedPrices] = await Promise.all([getLatestPrices(cardIds), getLatestSealedPrices(sealedIds)]);
+
+  return items.map((item) => ({
+    ...item,
+    marketPrice: marketPriceFor(item, cardPrices, sealedPrices),
+  }));
 }

@@ -181,7 +181,15 @@ export default async function PortfolioPage({
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h1 className="font-display text-2xl font-semibold tracking-tight text-ink">My Portfolio</h1>
-          <AddProductModal />
+          <div className="flex items-center gap-2">
+            <Link
+              href="/watchlist"
+              className="rounded-full border border-line px-4 py-2 font-body text-sm font-medium text-ink-muted transition-colors hover:text-ink"
+            >
+              Watchlist
+            </Link>
+            <AddProductModal />
+          </div>
         </div>
 
         {items.length > 0 && (

@@ -3,8 +3,10 @@ import { Prisma } from "@/app/generated/prisma/client";
 
 // Weighted-average cost basis when the same item is added again. Omitting a
 // cost on a repeat add means "no new information," not "$0" -- keep
-// whatever cost basis (if any) is already known.
-function mergeCost(
+// whatever cost basis (if any) is already known. Exported for
+// app/actions/trades.ts's live-trade completion, which blends the two
+// participants' existing cost bases the same way a repeat buy would.
+export function mergeCost(
   existingCost: number | null,
   existingQty: number,
   incomingCost: number | undefined,

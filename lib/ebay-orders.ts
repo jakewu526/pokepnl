@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { EBAY_ORDER_SCOPES, EBAY_TOKEN_ENDPOINT, getEbayOAuthClient } from "@/lib/ebay-oauth";
+import { EBAY_TOKEN_ENDPOINT, getEbayOAuthClient } from "@/lib/ebay-oauth";
 
 const FULFILLMENT_API_BASE = "https://api.ebay.com/sell/fulfillment/v1";
 
@@ -46,7 +46,12 @@ export async function getValidAccessToken(userId: string): Promise<string> {
   }
 
   const ebay = getEbayOAuthClient();
-  const tokens = await ebay.refreshAccessToken(EBAY_TOKEN_ENDPOINT, account.refreshToken, EBAY_ORDER_SCOPES);
+  // Passing a `scope` param on this grant makes eBay's token endpoint reject
+  // the request with `invalid_scope`, even when it's the exact same scopes
+  // the refresh token was originally issued with (confirmed live). Omitting
+  // it entirely makes eBay fall back to the refresh token's already-granted
+  // scopes, which is all a refresh needs.
+  const tokens = await ebay.refreshAccessToken(EBAY_TOKEN_ENDPOINT, account.refreshToken, []);
 
   await prisma.ebayAccount.update({
     where: { userId },
