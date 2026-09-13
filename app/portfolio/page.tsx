@@ -12,6 +12,7 @@ import { getPortfolioData, marketPriceFor } from "@/lib/portfolio";
 import { getClosedPositions } from "@/lib/pnl";
 import { getLatestPrices } from "@/lib/cards";
 import { getLatestSealedPrices } from "@/lib/sealed";
+import { BrandLink } from "@/components/BrandLink";
 
 type SortKey = "recent" | "value" | "unrealized-abs" | "unrealized-pct";
 type TypeFilter = "all" | "cards" | "sealed";
@@ -170,10 +171,8 @@ export default async function PortfolioPage({
   return (
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-10 border-b border-line bg-paper/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-5 sm:px-6">
-          <Link href="/" className="font-body text-sm font-medium text-emerald-strong hover:underline">
-            ← Binder
-          </Link>
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-5 sm:px-6">
+          <BrandLink />
           <AuthNav />
         </div>
       </header>

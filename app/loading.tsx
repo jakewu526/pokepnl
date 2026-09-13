@@ -1,12 +1,14 @@
+import { BrandMark } from "@/components/BrandMark";
+
 export default function Loading() {
   return (
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-10 border-b border-line bg-paper/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6">
-          <div className="flex items-baseline gap-3">
-            <span aria-hidden="true" className="inline-block h-3 w-3 rounded-[3px] bg-emerald" />
-            <h1 className="font-display text-2xl font-semibold tracking-tight text-ink">
-              Binder
+          <div className="flex items-center gap-3">
+            <BrandMark />
+            <h1 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-ink">
+              PokePnL
             </h1>
           </div>
           <div className="h-12 animate-pulse rounded-full border border-line bg-paper-raised" />

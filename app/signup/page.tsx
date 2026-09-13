@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SignupForm } from "@/components/SignupForm";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
+import { BrandMark } from "@/components/BrandMark";
 
 export default function SignupPage() {
   return (
@@ -9,10 +10,10 @@ export default function SignupPage() {
         href="/"
         className="mb-6 self-start font-body text-sm font-medium text-emerald-strong hover:underline"
       >
-        ← Binder
+        ← PokePnL
       </Link>
-      <div className="mb-6 flex items-baseline gap-3">
-        <span aria-hidden="true" className="inline-block h-3 w-3 rounded-[3px] bg-emerald" />
+      <div className="mb-6 flex items-center gap-3">
+        <BrandMark />
         <h1 className="font-display text-2xl font-semibold tracking-tight text-ink">
           Sign up
         </h1>

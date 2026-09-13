@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getWatchlistData, getFeaturedWatchlistCard } from "@/lib/watchlist";
@@ -11,6 +10,7 @@ import { SealedProductTile } from "@/components/SealedProductTile";
 import { PriceChart } from "@/components/PriceChart";
 import { StatTile } from "@/components/StatTile";
 import { RotatingWatchlistCard } from "@/components/RotatingWatchlistCard";
+import { BrandLink } from "@/components/BrandLink";
 
 export default async function WatchlistPage() {
   const session = await verifySession();
@@ -68,13 +68,8 @@ export default async function WatchlistPage() {
   return (
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-10 border-b border-line bg-paper/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-5 sm:px-6">
-          <Link
-            href="/"
-            className="font-body text-sm font-medium text-emerald-strong hover:underline"
-          >
-            ← Binder
-          </Link>
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-5 sm:px-6">
+          <BrandLink />
           <Suspense fallback={null}>
             <AuthNav />
           </Suspense>

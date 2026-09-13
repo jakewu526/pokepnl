@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BrandMark } from "@/components/BrandMark";
 
 // Without this, notFound() from a bad /cards, /sets, or /sealed id renders
 // Next's bare fallback inside our own <body>, which reads as a blank page.
@@ -6,13 +7,13 @@ export default function NotFound() {
   return (
     <div className="flex min-h-full flex-col">
       <header className="border-b border-line">
-        <div className="mx-auto flex max-w-6xl items-baseline gap-3 px-4 py-5 sm:px-6">
-          <span aria-hidden="true" className="inline-block h-3 w-3 rounded-[3px] bg-emerald" />
+        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-5 sm:px-6">
+          <BrandMark />
           <Link
             href="/"
-            className="font-display text-2xl font-semibold tracking-tight text-ink hover:underline"
+            className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-ink hover:underline"
           >
-            Binder
+            PokePnL
           </Link>
         </div>
       </header>

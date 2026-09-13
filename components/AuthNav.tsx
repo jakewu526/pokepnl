@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/dal";
-import { logout } from "@/app/actions/auth";
 import { UserMenuButton } from "@/components/UserMenuButton";
 
 // Signed-out state fits at 375px as-is -- UserMenuButton renders the same
@@ -26,12 +25,13 @@ export async function AuthNav() {
 
   return (
     <>
-      {/* Six links + name + Log out is ~600px wide with no wrap -- wider
-          than any phone viewport, and the reason the mobile layout used to
-          overflow horizontally (see the overflow-x: clip guard in
-          globals.css). Hidden below md; UserMenuButton stands in for all of
-          it there. */}
-      <div className="hidden items-center gap-3 font-body text-sm md:flex">
+      {/* Five links + name is wider than any phone viewport, and the reason
+          the mobile layout used to overflow horizontally (see the overflow-x:
+          clip guard in globals.css). Hidden below md; UserMenuButton stands
+          in for all of it there. Log out is deliberately not here -- Settings
+          is the single logout path at every width. font-display (Fraunces) to
+          match the wordmark, one step down from it in size. */}
+      <div className="hidden items-center gap-3 font-display text-sm md:flex lg:text-base">
         <Link href="/dashboard" className="font-medium text-emerald-strong hover:underline">
           Dashboard
         </Link>
@@ -47,12 +47,7 @@ export async function AuthNav() {
         <Link href="/settings" className="font-medium text-emerald-strong hover:underline">
           Settings
         </Link>
-        <span className="hidden text-ink-muted sm:inline">{user.name ?? user.email}</span>
-        <form action={logout}>
-          <button type="submit" className="font-medium text-ink-muted hover:text-ink">
-            Log out
-          </button>
-        </form>
+        <span className="hidden text-sm text-ink-muted lg:inline">{user.name ?? user.email}</span>
       </div>
       <div className="md:hidden">
         <UserMenuButton />

@@ -16,6 +16,7 @@ import {
   type PurchaseListItem,
   type TransactionListItem,
 } from "@/lib/pnl";
+import { BrandLink } from "@/components/BrandLink";
 
 const PAGE_SIZE = 30;
 
@@ -147,10 +148,12 @@ export default async function TransactionsPage({
   return (
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-10 border-b border-line bg-paper/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-5 sm:px-6">
-          <Link href="/dashboard" className="font-body text-sm font-medium text-emerald-strong hover:underline">
-            ← Dashboard
-          </Link>
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-5 sm:px-6">
+          {/* Always the catalog, never history.back() or /dashboard -- this
+              page is reachable from the dashboard, the mobile tab bar and a
+              card page, and "back" meaning three different things was the
+              confusing part. */}
+          <BrandLink />
           <AuthNav />
         </div>
       </header>

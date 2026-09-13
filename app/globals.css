@@ -107,6 +107,15 @@ body {
   overflow-x: clip;
 }
 
+/* Reserve the vertical scrollbar's width on every page, scrolling or not.
+   Without it a short page (e.g. an empty watchlist) has no scrollbar, so its
+   centered max-w-6xl header sits ~7px right of the same header on a long,
+   scrolling page -- and the wordmark visibly hops as you navigate. The whole
+   point of the shared BrandLink is that the top-left corner holds still. */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   background: var(--paper);
   color: var(--ink);
@@ -260,10 +269,16 @@ input:focus-visible,
    continuous idle float below: the wrapper plays this once, then .hero-art
    keeps floating underneath it, so the two never fight over the same
    transform. */
+/* Starts off the right edge of the viewport, not 180px to the right of
+   where it lands -- with the hero band centered, a fixed 180px offset began
+   the fall in open space mid-composition, which read as the card
+   materializing out of nowhere rather than entering the frame. 60vw clears
+   the card's own width at every breakpoint, and the section's
+   overflow-hidden does the clipping. */
 @keyframes hero-card-fall {
   0% {
     opacity: 0;
-    transform: translate(180px, -160px) rotate(20deg) scale(0.92);
+    transform: translate(60vw, -180px) rotate(20deg) scale(0.92);
   }
   65% {
     opacity: 1;

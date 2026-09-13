@@ -215,7 +215,6 @@ export async function getDashboardPulse(userId: string): Promise<DashboardPulse>
   const status: DashboardPulse["status"] = windowPoints.length < 2 ? "thin-history" : "full";
 
   if (status === "thin-history") {
-    const costBasis = items.reduce((sum, i) => sum + (i.costPerUnit ?? 0) * i.quantity, 0);
     const n = items.length;
     const driver = await pickLargestHoldingDriver(items, series, todayKey);
     return {
@@ -228,7 +227,13 @@ export async function getDashboardPulse(userId: string): Promise<DashboardPulse>
         {
           kind: "onboarding",
           tone: "neutral",
-          text: `Portfolio started · ${n} item${n === 1 ? "" : "s"} · ${money.format(costBasis)} invested. Price history builds daily — check back tomorrow.`,
+          // A newline, not a " · " separator: CollectionHero renders this
+          // with whitespace-pre-line so "Total worth" starts its own line.
+          // The figure is totalValue (what the collection is worth today),
+          // not costBasis (what was paid for it) -- and since totalValue is
+          // in the list splitAmounts() emphasizes, it renders large and gold
+          // like every other hero figure.
+          text: `Portfolio at ${n} item${n === 1 ? "" : "s"}\nTotal worth: ${money.format(totalValue)}\n Nice collection!`,
         },
       ],
       driver,

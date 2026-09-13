@@ -146,7 +146,7 @@ export function MobileTabBar({ onPrimaryAction }: { onPrimaryAction: () => void 
           onClick={onPrimaryAction}
           className="mx-[-6px] flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-emerald text-paper-raised shadow-lg transition-transform active:scale-95"
         >
-          <Image src="/pokepnl-mark.png" alt="" width={240} height={184} className="h-12 w-auto" priority />
+          <Image src="/pokepnl-mark.png" alt="" width={1241} height={1673} className="h-14 w-auto" priority />
         </button>
 
         {RIGHT_TABS.map((tab) => (

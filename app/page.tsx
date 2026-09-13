@@ -16,6 +16,7 @@ import { ScrollRestoration } from "@/components/ScrollRestoration";
 import { BinderSelectionProvider } from "@/components/BinderSelection";
 import { BinderSelectModeToggle } from "@/components/BinderSelectModeToggle";
 import { BinderBatchAddBar } from "@/components/BinderBatchAddBar";
+import { BrandMark } from "@/components/BrandMark";
 
 const CARD_SORT_OPTIONS: SortOption<CardSort>[] = [
   { key: "default", label: "Alphabetical" },
@@ -62,14 +63,11 @@ export default async function Home({
       </Suspense>
       <header className="sticky top-0 z-20 border-b border-line bg-paper/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6">
-          <div className="flex items-baseline justify-between gap-4">
-            <div className="flex items-baseline gap-3">
-              <span
-                aria-hidden="true"
-                className="inline-block h-3 w-3 rounded-[3px] bg-emerald"
-              />
-              <h1 className="font-display text-2xl font-semibold tracking-tight text-ink">
-                Binder
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <BrandMark />
+              <h1 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-ink">
+                PokePnL
               </h1>
               {process.env.NEXT_PUBLIC_APP_ENV === "uat" && (
                 <span className="rounded-full bg-amber-tint px-2 py-0.5 font-body text-[11px] font-medium text-amber">
@@ -78,7 +76,7 @@ export default async function Home({
               )}
             </div>
             <div className="flex items-center gap-4">
-              <p className="hidden font-data text-xs text-ink-muted sm:block">
+              <p className="hidden font-data text-xs text-ink-muted xl:block">
                 {cardCount.toLocaleString()} cards · {setCount.toLocaleString()} sets
               </p>
               <Suspense fallback={null}>

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { verifySession, getCurrentUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { AuthNav } from "@/components/AuthNav";
@@ -7,6 +6,7 @@ import { FriendsSection } from "@/components/settings/FriendsSection";
 import { logout } from "@/app/actions/auth";
 import { getFriendsData } from "@/app/actions/friends";
 import { getPendingTradeOffers } from "@/app/actions/trades";
+import { BrandLink } from "@/components/BrandLink";
 
 export default async function SettingsPage() {
   const session = await verifySession();
@@ -22,10 +22,8 @@ export default async function SettingsPage() {
   return (
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-10 border-b border-line bg-paper/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-5 sm:px-6">
-          <Link href="/dashboard" className="font-body text-sm font-medium text-emerald-strong hover:underline">
-            ← Dashboard
-          </Link>
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-5 sm:px-6">
+          <BrandLink />
           <AuthNav />
         </div>
       </header>

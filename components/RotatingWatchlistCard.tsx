@@ -5,31 +5,21 @@ import Image from "next/image";
 import Link from "next/link";
 import { setFeaturedWatchlistCard } from "@/app/actions/watchlist";
 import type { FeaturedCardOption } from "@/lib/watchlist";
+import { POKEPNL_MASK } from "@/components/BrandMark";
 
-// Generic Pokeball-style motif built from basic shapes -- deliberately not a
-// reproduction of the real (trademarked) Pokemon TCG card back.
+// The card back. Was a generic Pokeball-style motif; it's the PokePnL mark
+// now, recolored from the white-on-transparent asset with a CSS mask so it
+// reads on the paper ground. `muted` renders it in --line for the empty
+// state, where the back shouldn't compete with the "add a card" prompt.
 function CardBackMotif({ muted = false }: { muted?: boolean }) {
-  const stroke = "var(--ink)";
-  const top = muted ? "var(--line)" : "var(--emerald)";
-  const bottom = "var(--paper-raised)";
   return (
-    <svg viewBox="0 0 100 100" className="h-full w-full" aria-hidden="true">
-      <rect x="1" y="1" width="98" height="98" rx="8" fill="var(--paper)" stroke="var(--line)" strokeWidth="2" />
-      <g transform="translate(50 50)">
-        <clipPath id="ball-top">
-          <rect x="-32" y="-32" width="64" height="32" />
-        </clipPath>
-        <clipPath id="ball-bottom">
-          <rect x="-32" y="0" width="64" height="32" />
-        </clipPath>
-        <circle r="32" fill={top} clipPath="url(#ball-top)" />
-        <circle r="32" fill={bottom} clipPath="url(#ball-bottom)" />
-        <circle r="32" fill="none" stroke={stroke} strokeWidth="2.5" />
-        <line x1="-32" y1="0" x2="32" y2="0" stroke={stroke} strokeWidth="2.5" />
-        <circle r="9" fill="var(--paper)" stroke={stroke} strokeWidth="2.5" />
-        <circle r="3.5" fill={stroke} />
-      </g>
-    </svg>
+    <div className="flex h-full w-full items-center justify-center bg-paper p-[12%]">
+      <span
+        aria-hidden="true"
+        className={`block h-full w-full ${muted ? "bg-line" : "bg-emerald"}`}
+        style={POKEPNL_MASK}
+      />
+    </div>
   );
 }
 

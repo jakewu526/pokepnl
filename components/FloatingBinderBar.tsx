@@ -1,3 +1,5 @@
+import { BrandMark } from "@/components/BrandMark";
+
 // Every top-level page duplicates its own header (no shared Header
 // component), so keeping "the Binder title and the avatar" undimmed while
 // QuickActionOverlay's backdrop covers everything else can't be done by
@@ -8,9 +10,9 @@ export function FloatingBinderBar({ hasAvatar, hasNotification }: { hasAvatar: b
   return (
     <div className="fixed inset-x-0 top-0 z-[60] border-b border-line bg-paper/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-5 sm:px-6">
-        <div className="flex items-baseline gap-3">
-          <span className="inline-block h-3 w-3 rounded-[3px] bg-emerald" />
-          <span className="font-display text-2xl font-semibold tracking-tight text-ink">Binder</span>
+        <div className="flex items-center gap-3">
+          <BrandMark />
+          <span className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-ink">PokePnL</span>
         </div>
         {hasAvatar && (
           <div className="relative flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald text-paper-raised">

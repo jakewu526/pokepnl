@@ -47,9 +47,9 @@ export default async function SetDetailPage({
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-5 sm:px-6">
           <BackLink
             fallbackHref="/?view=sets"
-            className="font-body text-sm font-medium text-emerald-strong hover:underline"
+            className="font-display text-base font-medium text-emerald-strong hover:underline"
           >
-            ← Binder
+            ← Sets
           </BackLink>
           <div className="flex items-center gap-4">
             <Suspense fallback={null}>

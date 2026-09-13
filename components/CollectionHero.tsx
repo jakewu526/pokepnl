@@ -31,7 +31,9 @@ function escapeRegExp(value: string): string {
 // candidate that happens to be a substring of it. Any dollar figure in the
 // sentence that isn't one of the known amounts (e.g. a milestone threshold,
 // or costBasis in the onboarding fact) is left unemphasized rather than
-// guessed at -- a plain sentence beats a wrong split.
+// guessed at -- a plain sentence beats a wrong split. (The onboarding fact's
+// figure is totalValue, which *is* in that list, so it emphasizes like the
+// rest.)
 function splitAmounts(text: string, amounts: number[]): { text: string; emphasize: boolean }[] {
   const candidates = Array.from(new Set(amounts.filter((a) => a !== 0).map((a) => priceFormatter.format(Math.abs(a)))))
     .sort((a, b) => b.length - a.length);
@@ -111,19 +113,20 @@ export function CollectionHero({
 
   return (
     <section className="relative isolate flex min-h-full flex-col justify-center overflow-hidden bg-[#163f30]">
-      {/* No mx-auto here, deliberately -- the reference video anchors the
-          headline to the actual left edge of the screen rather than boxing
-          everything into a centered column. The text column is `auto`, not
-          `1fr` -- `1fr` would size the column to all *available* space
-          regardless of how little "Hi Jake" actually needs, and the
-          headline (a block element) stretches to fill its column, so the
-          art would end up parked at the far edge of an empty track instead
-          of near the text. `auto` sizes the column, and everything in it,
-          to its own content -- capped by max-w-2xl on the column itself so
-          an unusually long name still wraps instead of shoving the art off
-          toward the edge of the screen. */}
-      <div className="grid w-full max-w-[1200px] items-center gap-10 px-6 py-14 sm:px-10 sm:py-20 lg:grid-cols-[auto_auto] lg:gap-14 lg:px-16 xl:px-20">
-        <div className="flex max-w-2xl flex-col items-start gap-4 text-left">
+      {/* mx-auto + lg:justify-center: the headline used to be anchored hard
+          to the left edge (following the reference video), which on a wide
+          monitor left a third of the band empty on the right and nothing on
+          the left. Both tracks are `auto`, not `1fr` -- `1fr` would size the
+          text column to all *available* space regardless of how little "Hi
+          Jake" actually needs, and the headline (a block element) stretches
+          to fill its column, so the art would end up parked at the far edge
+          of an empty track instead of near the text. `auto` sizes each
+          column to its own content; justify-center then centers the pair, so
+          the leftover space splits evenly instead of all landing on the
+          right. max-w-2xl on the text column still wraps an unusually long
+          name rather than shoving the art toward the edge. */}
+      <div className="mx-auto grid w-full max-w-[1200px] items-center gap-10 px-6 py-14 sm:px-10 sm:py-20 lg:grid-cols-[auto_auto] lg:justify-center lg:gap-20 lg:px-16 xl:gap-28 xl:px-20">
+        <div className="flex max-w-xl flex-col items-start gap-4 text-left">
           <p className="rise-in font-body text-xs font-medium uppercase tracking-[0.14em] text-white/55">
             Your collection{windowCaption && <span> · {windowCaption}</span>}
           </p>
@@ -139,7 +142,7 @@ export function CollectionHero({
           </h1>
 
           <p
-            className="rise-in max-w-lg font-body text-xl leading-snug text-white/90 sm:text-2xl"
+            className="rise-in max-w-lg whitespace-pre-line font-body text-xl leading-snug text-white/90 sm:text-2xl"
             style={{ animationDelay: "110ms" }}
           >
             {primarySegments.map((seg, i) =>

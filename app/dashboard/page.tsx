@@ -17,6 +17,7 @@ import { getTopMovers, getAllocation, getCollectionTimeline } from "@/lib/dashbo
 import { getLatestPrices } from "@/lib/cards";
 import { getLatestSealedPrices } from "@/lib/sealed";
 import { getDashboardPulse } from "@/lib/narrative";
+import { BrandLink } from "@/components/BrandLink";
 
 const RECENT_LIMIT = 10;
 
@@ -142,10 +143,8 @@ export default async function DashboardPage() {
   return (
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-20 border-b border-line bg-paper/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 sm:py-4">
-          <Link href="/" className="font-body text-sm font-medium text-emerald-strong hover:underline">
-            ← Binder
-          </Link>
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-5 sm:px-6">
+          <BrandLink />
           <AuthNav />
         </div>
       </header>
@@ -170,7 +169,13 @@ export default async function DashboardPage() {
           // the user continue down to top movers/transactions/footer.
           // Proximity only snaps when already close to a snap point and
           // never fights a scroll gesture headed past the last one.
-          <div className="lg:h-[calc(100dvh-4.5rem)] lg:snap-y lg:snap-proximity lg:overflow-y-auto">
+          //
+          // 6.0625rem is the header's measured height now that it carries
+          // the full wordmark (the h-14 brand mark + text-3xl in a py-5 row,
+          // plus the 1px border) rather than the old compact py-2.5 back link.
+          // Change the header's padding or mark size and this has to change
+          // with it, or the snap sections stop filling exactly one screen.
+          <div className="lg:h-[calc(100dvh-6.0625rem)] lg:snap-y lg:snap-proximity lg:overflow-y-auto">
             {/* Hidden below md -- the hero's big card art and narrative
                 sentence don't fit the "everything on one screen" mobile
                 budget, so mobile skips straight to the numbers below. */}
