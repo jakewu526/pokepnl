@@ -1,0 +1,16 @@
+# core.autocrlf is true in this repo, and git only auto-detects "binary" by
+# looking for a NUL byte in a file's first 8000 bytes. An Illustrator/PDF
+# file has none, so git would classify design/*.ai as TEXT and rewrite its
+# line endings on checkout -- silently corrupting the logo master. Mark the
+# binary asset types explicitly rather than relying on the heuristic.
+*.ai binary
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.mp4 binary
+*.woff binary
+*.woff2 binary
