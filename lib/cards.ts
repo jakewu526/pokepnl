@@ -308,6 +308,8 @@ export async function getCardSuggestions(query: string): Promise<CardSuggestion[
 }
 
 export type PricePoint = { date: string; price: number };
+//information about what the Cards return on the homepage, Ex: name, id, set number, rarity
+
 
 export type CardDetail = {
   id: string;
@@ -323,6 +325,7 @@ export type CardDetail = {
   price: number | null;
   priceSource: "PRICECHARTING" | "TCGPLAYER" | "CARDMARKET" | null;
   history: PricePoint[];
+  priceCaptureDate: string | null;
 };
 
 type HistoryRow = {
@@ -331,6 +334,8 @@ type HistoryRow = {
   price: string;
   capturedDate: Date;
 };
+
+//takes the CardDetail above and exports the data
 
 export async function getCardDetail(id: string): Promise<CardDetail | null> {
   const card = await prisma.card.findUnique({
@@ -364,6 +369,7 @@ export async function getCardDetail(id: string): Promise<CardDetail | null> {
 
   let history: PricePoint[] = [];
   let priceSource: "PRICECHARTING" | "TCGPLAYER" | "CARDMARKET" | null = null;
+  let priceCaptureDate: string | null = null;
 
   if (rows.length > 0) {
     const last = rows[rows.length - 1];
@@ -378,6 +384,7 @@ export async function getCardDetail(id: string): Promise<CardDetail | null> {
       lastDayRows.find((r) => r.source === "TCGPLAYER") ??
       last;
     priceSource = chosen.source;
+    priceCaptureDate = lastDateKey;
 
     history = rows
       .filter((r) => r.source === chosen.source && r.condition === chosen.condition)
@@ -405,6 +412,7 @@ export async function getCardDetail(id: string): Promise<CardDetail | null> {
     setTotal: card.set.totalCards,
     price,
     priceSource,
+    priceCaptureDate,
     history,
   };
 }

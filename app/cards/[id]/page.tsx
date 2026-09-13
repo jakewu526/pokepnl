@@ -47,6 +47,19 @@ export default async function CardDetailPage({
   // whatever price data is available (PriceCharting/TCGplayer/Cardmarket).
   const hasGradeData = gradeHistories.length > 1;
 
+let dayCount: number | null = null;
+
+    if (card.priceCaptureDate != null) {
+
+      const dateCardPrice = new Date(card.priceCaptureDate);
+      const dateToday = new Date();
+      const milliseconds = dateToday.getTime() - dateCardPrice.getTime();
+      const days = milliseconds / 86_400_000;
+      dayCount = Math.floor(days);
+  }
+
+
+
   return (
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-10 border-b border-line bg-paper/95 backdrop-blur">
@@ -106,6 +119,8 @@ export default async function CardDetailPage({
                 {card.setSeries ? ` · ${card.setSeries}` : ""} ·{" "}
                 <span className="font-data">{formatNumber(card.number, card.setTotal)}</span>
               </p>
+              {dayCount !== null && dayCount > 0 && (
+                <p className="mt-1 font-body text-sm text-black"> Pricing updated {dayCount} days ago </p>)}
               {card.supertype && (
                 <p className="mt-1 font-body text-xs text-ink-muted">
                   {card.supertype}
