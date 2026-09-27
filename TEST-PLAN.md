@@ -775,11 +775,35 @@ browser pane skips layout until it paints), then measure.
 | MOB-09 | Android / desktop viewport meta | unchanged — no `maximum-scale` (pinch-zoom preserved) |
 | MOB-10 | Mobile tab bar labels | 10px (was 9px) |
 
+---
+
+# Suite 25 — Password reset (RESET)
+
+`/forgot-password` → emailed link → `/reset-password?token=…`. With
+`RESEND_API_KEY`/`EMAIL_FROM` unset, "emails" are printed to the server log
+(`[email:not-configured]`) — read the link from there.
+
+| ID | Case | Expected |
+|---|---|---|
+| RESET-01 | `/login` | "Forgot password?" link under the form |
+| RESET-02 | Request for an existing password account | "If there's an account…" message; one email (or log entry) with a `/reset-password?token=` link |
+| RESET-03 | Request for an unknown email | identical message; no email sent |
+| RESET-04 | Request for a Google-only account | identical message; email says the account signs in with Google (no link) |
+| RESET-05 | Second request for the same account within 60s | identical message; no second email |
+| RESET-06 | Open link, mismatched passwords | "Passwords don't match." |
+| RESET-07 | Open link, password < 8 chars | "Password must be at least 8 characters." |
+| RESET-08 | Open link, valid matching passwords | lands on `/login?reset=1` with "Password updated"; old password rejected, new one works |
+| RESET-09 | Reuse the same link | "This reset link has expired or was already used." — no form |
+| RESET-10 | Link older than 1 hour | same expired message |
+| RESET-11 | DB after a request | only a SHA-256 hash in `PasswordResetToken.tokenHash`, never the raw token |
+| RESET-12 | `APP_URL` set | emailed link uses it regardless of the request's Host header |
+
 
 ## Run log
 
 | Date | Env | Suites run | Result | Notes |
 |---|---|---|---|---|
+| 2026-09-27 | Dev server → UAT DB | RESET | 01–03, 06, 08, 09 pass | 04/05/07/10–12 by code review only. |
 | 2026-09-27 | Dev server → UAT DB | LEGAL, MOB | LEGAL 01,02,04–06,08 pass; MOB 01–07,09,10 pass | LEGAL-03 waits on real values in `lib/legal.ts`; LEGAL-07 by review. MOB-08 needs a physical iPhone (script verified by simulating an iOS navigator). Audit covered /, sets, set, card, sealed, sealed item, dashboard, portfolio, transactions, watchlist, settings, live trade, 404, legal pages. |
 | 2026-09-27 | Dev server → UAT DB | DEL | 9/9 pass | G simulated by logging in, then nulling `passwordHash` in the DB. Throwaway accounts deleted afterward. |
 | 2026-09-26 | Dev server → UAT DB | SAFE | 15/15 pass | Two sessions. SAFE-15 first failed: the `•••` button was 32px, so it was raised to 40px and re-measured. SAFE-14 called the actions directly via `Next-Action` POSTs; all five bad calls were rejected and wrote no rows. Tip: with the browser pane hidden, pages don't hydrate until a real click (`computer` left_click), and `javascript_tool` clicks alone won't trigger it. Throwaway accounts deleted afterward. |
@@ -836,3 +860,4 @@ sweep of detail-page failures.
 | 2026-09-26 | Added Suite 21 (SAFE-01…15) for block & report on the Friends section — new `UserBlock`/`UserReport` tables (migration `20260926200000_add_user_blocks_and_reports`), `blockUser`/`unblockUser`/`reportUser` in `app/actions/friends.ts`, and `npm run reports:list`. First step toward App Store submission. |
 | 2026-09-27 | Added Suite 22 (DEL-01…09) for in-app account deletion — `deleteAccount` in `app/actions/auth.ts` (relies on existing onDelete: Cascade; relabels other users' live-trade rows as "a deleted account"), `DeleteAccountButton` in Settings → Account, and the `?deleted=1` notice on `/login`. |
 | 2026-09-27 (later) | Added Suite 23 (LEGAL-01…08) for the Privacy/Terms/Support pages, footer and signup notice, and Suite 24 (MOB-01…10) for the app-store mobile polish pass. |
+| 2026-09-27 (later) | Added Suite 25 (RESET-01…12) for the forgot-password flow: `PasswordResetToken` table, `app/actions/password-reset.ts`, pluggable `lib/email.ts` (Resend or log-only), `/forgot-password` and `/reset-password` pages. |

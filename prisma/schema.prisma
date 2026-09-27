@@ -99,6 +99,24 @@ model User {
   blocksReceived       UserBlock[]  @relation("BlockBlocked")
   reportsMade          UserReport[] @relation("ReportReporter")
   reportsReceived      UserReport[] @relation("ReportReported")
+  passwordResetTokens  PasswordResetToken[]
+}
+
+// One-time "forgot password" links. Only a SHA-256 hash of the token is
+// stored, so a database leak can't be turned into working reset links.
+// Tokens expire after an hour and are single-use (usedAt); requesting a new
+// link deletes any older unused ones for that user.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // One directed row per block. Blocking is one-sided -- the blocked account
