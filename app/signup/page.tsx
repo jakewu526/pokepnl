@@ -2,6 +2,7 @@ import Link from "next/link";
 import { SignupForm } from "@/components/SignupForm";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { BrandMark } from "@/components/BrandMark";
+import { LEGAL } from "@/lib/legal";
 
 export default function SignupPage() {
   return (
@@ -25,6 +26,18 @@ export default function SignupPage() {
         <div className="h-px flex-1 bg-line" />
       </div>
       <GoogleSignInButton />
+      {/* Covers both paths above -- Google sign-in creates an account too. */}
+      <p className="mt-4 font-body text-xs leading-relaxed text-ink-muted">
+        By signing up you confirm you&apos;re {LEGAL.minimumAge} or older and agree to our{" "}
+        <Link href="/terms" className="text-emerald-strong hover:underline">
+          Terms of Use
+        </Link>{" "}
+        and{" "}
+        <Link href="/privacy" className="text-emerald-strong hover:underline">
+          Privacy Policy
+        </Link>
+        .
+      </p>
       <p className="mt-6 font-body text-sm text-ink-muted">
         Already have an account?{" "}
         <Link href="/login" className="font-medium text-emerald-strong hover:underline">

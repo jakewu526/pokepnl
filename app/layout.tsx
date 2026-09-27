@@ -4,6 +4,7 @@ import "./globals.css";
 import { getCurrentUser } from "@/lib/dal";
 import { hasPendingTradeActivity } from "@/lib/notifications";
 import { AppChrome } from "@/components/AppChrome";
+import { SiteFooter } from "@/components/SiteFooter";
 
 const fraunces = Fraunces({
   variable: "--font-display",
@@ -53,6 +54,7 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col pb-[calc(6rem+env(safe-area-inset-bottom))] font-body antialiased md:pb-0">
         {children}
+        <SiteFooter />
         <AppChrome isAuthed={!!user} hasNotification={hasNotification} />
       </body>
     </html>

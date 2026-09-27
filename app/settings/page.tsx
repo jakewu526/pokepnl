@@ -6,6 +6,7 @@ import { FriendsSection } from "@/components/settings/FriendsSection";
 import { logout } from "@/app/actions/auth";
 import { getFriendsData } from "@/app/actions/friends";
 import { getPendingTradeOffers } from "@/app/actions/trades";
+import Link from "next/link";
 import { BrandLink } from "@/components/BrandLink";
 import { DeleteAccountButton } from "@/components/settings/DeleteAccountButton";
 
@@ -47,8 +48,25 @@ export default async function SettingsPage() {
         </section>
 
         <section className="mb-10">
-          <h2 className="mb-3 font-display text-lg font-semibold tracking-tight text-ink">Preferences</h2>
-          <p className="font-body text-sm text-ink-muted">More settings coming soon.</p>
+          <h2 className="mb-3 font-display text-lg font-semibold tracking-tight text-ink">Help &amp; legal</h2>
+          <div className="flex flex-col divide-y divide-line rounded-card border border-line bg-paper-raised">
+            {[
+              { href: "/support", label: "Support & FAQ" },
+              { href: "/privacy", label: "Privacy Policy" },
+              { href: "/terms", label: "Terms of Use" },
+            ].map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                className="flex min-h-12 items-center justify-between px-4 font-body text-sm text-ink transition-colors hover:text-emerald-strong"
+              >
+                {l.label}
+                <span aria-hidden="true" className="text-ink-muted">
+                  →
+                </span>
+              </Link>
+            ))}
+          </div>
         </section>
 
         {/* Shown at every width -- this is the only logout path on mobile,
