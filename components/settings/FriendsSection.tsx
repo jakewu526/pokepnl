@@ -10,10 +10,17 @@ import {
   declineFriendRequest,
   cancelFriendRequest,
   removeFriend,
+  blockUser,
+  unblockUser,
   type FriendsData,
 } from "@/app/actions/friends";
 import { formatFriendCode } from "@/lib/friend-code";
 import type { TradeInviteSummary } from "@/app/actions/trades";
+import { DialogShell } from "@/components/DialogShell";
+import { PersonMenu } from "./PersonMenu";
+import { ReportUserDialog } from "./ReportUserDialog";
+
+type Person = { userId: string; displayName: string };
 
 // Friends exist for exactly one reason: unlocking a live trade with another
 // account -- no messaging, no activity feed. Mutations call router.refresh()
@@ -27,6 +34,8 @@ export function FriendsSection({ data, pendingTrades }: { data: FriendsData; pen
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [reporting, setReporting] = useState<Person | null>(null);
+  const [blocking, setBlocking] = useState<Person | null>(null);
 
   useEffect(() => {
     if (code) return;
@@ -59,6 +68,24 @@ export function FriendsSection({ data, pendingTrades }: { data: FriendsData; pen
       await fn();
       router.refresh();
     });
+  }
+
+  function confirmBlock() {
+    if (!blocking) return;
+    const { userId } = blocking;
+    setBlocking(null);
+    act(() => blockUser(userId));
+  }
+
+  function menuFor(userId: string, displayName: string) {
+    return (
+      <PersonMenu
+        displayName={displayName}
+        disabled={pending}
+        onReport={() => setReporting({ userId, displayName })}
+        onBlock={() => setBlocking({ userId, displayName })}
+      />
+    );
   }
 
   return (
@@ -128,6 +155,7 @@ export function FriendsSection({ data, pendingTrades }: { data: FriendsData; pen
                   >
                     Decline
                   </button>
+                  {menuFor(r.userId, r.name ?? r.email)}
                 </div>
               </div>
             ))}
@@ -190,19 +218,81 @@ export function FriendsSection({ data, pendingTrades }: { data: FriendsData; pen
             {data.friends.map((f) => (
               <div key={f.friendshipId} className="flex items-center justify-between gap-3">
                 <span className="font-body text-sm text-ink">{f.name ?? f.email}</span>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => act(() => removeFriend(f.friendshipId))}
-                  className="font-body text-xs font-medium text-ink-muted hover:text-amber disabled:opacity-60"
-                >
-                  Remove
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => act(() => removeFriend(f.friendshipId))}
+                    className="font-body text-xs font-medium text-ink-muted hover:text-amber disabled:opacity-60"
+                  >
+                    Remove
+                  </button>
+                  {menuFor(f.userId, f.name ?? f.email)}
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {data.blocked.length > 0 && (
+        <div className="border-t border-line pt-4">
+          <h3 className="font-display text-base font-semibold tracking-tight text-ink">Blocked</h3>
+          <p className="font-body text-sm text-ink-muted">They can&apos;t add you or trade with you.</p>
+          <div className="mt-2 flex flex-col gap-2">
+            {data.blocked.map((b) => (
+              <div key={b.userId} className="flex items-center justify-between gap-3">
+                <span className="font-body text-sm text-ink-muted">{b.name ?? b.email}</span>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => act(() => unblockUser(b.userId))}
+                  className="font-body text-xs font-medium text-ink-muted hover:text-ink disabled:opacity-60"
+                >
+                  Unblock
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {blocking && (
+        <DialogShell title={`Block ${blocking.displayName}?`} onClose={() => setBlocking(null)}>
+          <p className="font-body text-sm text-ink-muted">
+            They&apos;ll be removed from your friends, any trade you have going with them is cancelled, and neither of
+            you can add the other again. They won&apos;t be told. You can unblock them later.
+          </p>
+          <div className="mt-4 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setBlocking(null)}
+              className="flex-1 rounded-full border border-line px-4 py-2.5 font-body text-sm font-medium text-ink transition-colors hover:bg-paper-raised"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmBlock}
+              className="flex-1 rounded-full bg-amber px-4 py-2.5 font-body text-sm font-medium text-paper-raised transition-opacity hover:opacity-90"
+            >
+              Block
+            </button>
+          </div>
+        </DialogShell>
+      )}
+
+      {reporting && (
+        <ReportUserDialog
+          userId={reporting.userId}
+          displayName={reporting.displayName}
+          onClose={() => setReporting(null)}
+          onDone={() => {
+            setReporting(null);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

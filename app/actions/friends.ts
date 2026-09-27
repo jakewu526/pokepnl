@@ -46,6 +46,18 @@ export async function sendFriendRequest(rawCode: string): Promise<{ error?: stri
   if (!target) return { error: "No account found with that code." };
   if (target.id === session.userId) return { error: "That's your own code." };
 
+  // The blocked side gets the same message as a mistyped code, so a block
+  // never reveals itself.
+  const block = await findBlockBetween(session.userId, target.id);
+  if (block) {
+    return {
+      error:
+        block.blockerId === session.userId
+          ? "You've blocked this account. Unblock it below first."
+          : "No account found with that code.",
+    };
+  }
+
   const existing = await prisma.friendship.findFirst({
     where: {
       OR: [
@@ -106,6 +118,105 @@ export async function removeFriend(friendshipId: string): Promise<void> {
   revalidatePath("/settings");
 }
 
+// ---------- block & report (App Store guideline 1.2) ----------
+
+async function findBlockBetween(userIdA: string, userIdB: string) {
+  return prisma.userBlock.findFirst({
+    where: {
+      OR: [
+        { blockerId: userIdA, blockedId: userIdB },
+        { blockerId: userIdB, blockedId: userIdA },
+      ],
+    },
+    select: { blockerId: true },
+  });
+}
+
+// Blocking also tears down everything the two accounts share -- the
+// friendship (or pending request) in either direction and any live trade
+// still being negotiated -- so nothing is left that lets them reach each
+// other. proposeTradeOffer already requires an ACCEPTED friendship, so
+// deleting it is what keeps new trades from starting.
+async function applyBlock(blockerId: string, blockedId: string) {
+  await prisma.$transaction([
+    prisma.userBlock.upsert({
+      where: { blockerId_blockedId: { blockerId, blockedId } },
+      create: { blockerId, blockedId },
+      update: {},
+    }),
+    prisma.friendship.deleteMany({
+      where: {
+        OR: [
+          { requesterId: blockerId, addresseeId: blockedId },
+          { requesterId: blockedId, addresseeId: blockerId },
+        ],
+      },
+    }),
+    prisma.tradeOffer.updateMany({
+      where: {
+        status: "PENDING",
+        OR: [
+          { proposerId: blockerId, recipientId: blockedId },
+          { proposerId: blockedId, recipientId: blockerId },
+        ],
+      },
+      data: { status: "CANCELLED" },
+    }),
+  ]);
+}
+
+export async function blockUser(userId: string): Promise<{ error?: string }> {
+  const session = await verifySession();
+  if (userId === session.userId) return { error: "You can't block yourself." };
+
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  if (!target) return { error: "Account not found." };
+
+  await applyBlock(session.userId, target.id);
+  revalidatePath("/settings");
+  return {};
+}
+
+export async function unblockUser(userId: string): Promise<void> {
+  const session = await verifySession();
+  await prisma.userBlock.deleteMany({ where: { blockerId: session.userId, blockedId: userId } });
+  revalidatePath("/settings");
+}
+
+const REPORT_REASONS = ["INAPPROPRIATE_NAME", "SCAM_OR_UNFAIR_TRADE", "HARASSMENT_OR_SPAM", "OTHER"] as const;
+export type ReportReasonValue = (typeof REPORT_REASONS)[number];
+const MAX_REPORT_DETAILS = 1000;
+
+export async function reportUser(input: {
+  userId: string;
+  reason: string;
+  details?: string;
+  alsoBlock: boolean;
+}): Promise<{ error?: string }> {
+  const session = await verifySession();
+  if (input.userId === session.userId) return { error: "You can't report yourself." };
+  if (!REPORT_REASONS.includes(input.reason as ReportReasonValue)) return { error: "Pick a reason." };
+
+  const details = input.details?.trim().slice(0, MAX_REPORT_DETAILS) || null;
+  if (input.reason === "OTHER" && !details) return { error: "Tell us a little about what happened." };
+
+  const target = await prisma.user.findUnique({ where: { id: input.userId }, select: { id: true } });
+  if (!target) return { error: "Account not found." };
+
+  await prisma.userReport.create({
+    data: {
+      reporterId: session.userId,
+      reportedId: target.id,
+      reason: input.reason as ReportReasonValue,
+      details,
+    },
+  });
+  if (input.alsoBlock) await applyBlock(session.userId, target.id);
+
+  revalidatePath("/settings");
+  return {};
+}
+
 // Friend picker for ProposeTradeModal -- can be opened from anywhere via the
 // green button overlay, so it needs its own fetch rather than relying on a
 // page's server-fetched props.
@@ -118,18 +229,21 @@ export async function getAcceptedFriends(): Promise<FriendSummary[]> {
 export type FriendSummary = { friendshipId: string; userId: string; name: string | null; email: string };
 export type FriendRequestSummary = { friendshipId: string; userId: string; name: string | null; email: string; createdAt: string };
 
+export type BlockedSummary = { userId: string; name: string | null; email: string };
+
 export type FriendsData = {
   code: string | null;
   friends: FriendSummary[];
   incoming: FriendRequestSummary[];
   outgoing: FriendRequestSummary[];
+  blocked: BlockedSummary[];
 };
 
 // Single read used by app/settings/page.tsx to hydrate FriendsSection --
 // follows the page's existing pattern of doing its own prisma reads
 // server-side rather than a dedicated "list" action.
 export async function getFriendsData(userId: string): Promise<FriendsData> {
-  const [user, rows] = await Promise.all([
+  const [user, rows, blocks] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { friendCode: true } }),
     prisma.friendship.findMany({
       where: { OR: [{ requesterId: userId }, { addresseeId: userId }] },
@@ -138,6 +252,11 @@ export async function getFriendsData(userId: string): Promise<FriendsData> {
         requester: { select: { id: true, name: true, email: true } },
         addressee: { select: { id: true, name: true, email: true } },
       },
+    }),
+    prisma.userBlock.findMany({
+      where: { blockerId: userId },
+      orderBy: { createdAt: "desc" },
+      include: { blocked: { select: { id: true, name: true, email: true } } },
     }),
   ]);
 
@@ -169,5 +288,7 @@ export async function getFriendsData(userId: string): Promise<FriendsData> {
     }
   }
 
-  return { code: user?.friendCode ?? null, friends, incoming, outgoing };
+  const blocked = blocks.map((b) => ({ userId: b.blocked.id, name: b.blocked.name, email: b.blocked.email }));
+
+  return { code: user?.friendCode ?? null, friends, incoming, outgoing, blocked };
 }

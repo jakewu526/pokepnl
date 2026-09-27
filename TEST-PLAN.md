@@ -692,10 +692,36 @@ hero and the #1 gainer. See the change log below for what replaced what.
 
 ---
 
+# Suite 21 — Friends: block & report (SAFE)
+
+Block and report on the Friends section of `/settings` (App Store guideline 1.2).
+Needs two accounts, **A** and **B**, that are friends, plus a third, **C**, with a
+pending request to A. Run in two browsers (or one normal + one private window).
+
+| ID | Case | Expected |
+|---|---|---|
+| SAFE-01 | A: `•••` on friend B's row | menu shows Report and Block; tapping outside closes it |
+| SAFE-02 | A: Block B → Cancel | nothing changes |
+| SAFE-03 | A: Block B → Block | B leaves A's Friends list and appears under **Blocked**; B's list no longer shows A either |
+| SAFE-04 | Block with a PENDING live trade between A and B | the offer becomes CANCELLED; it disappears from both users' Pending trades |
+| SAFE-05 | B enters A's friend code after SAFE-03 | "No account found with that code." — the block is not revealed |
+| SAFE-06 | A enters B's friend code after SAFE-03 | "You've blocked this account. Unblock it below first." |
+| SAFE-07 | A: Unblock B | B leaves Blocked; friendship is **not** restored; either can send a new request |
+| SAFE-08 | A: `•••` on C's incoming request → Block | request disappears; C is under Blocked |
+| SAFE-09 | Report dialog: Send is disabled until a reason is picked | disabled |
+| SAFE-10 | Report with reason "Something else" and empty details | "Tell us a little about what happened." |
+| SAFE-11 | Report with "Also block" ticked (default) | thank-you screen mentions the block; `UserReport` row written; B under Blocked |
+| SAFE-12 | Report with "Also block" unticked | report row written; B still a friend |
+| SAFE-13 | `npm run reports:list` | lists the open reports oldest first; `-- --resolve <id>` removes one from the list |
+| SAFE-14 | Call `blockUser`/`reportUser` with your own id or a nonexistent id | error returned, no row written |
+| SAFE-15 | Menu, both dialogs and the Blocked list at 375px | no overflow; tap targets ≥ 40px |
+
+
 ## Run log
 
 | Date | Env | Suites run | Result | Notes |
 |---|---|---|---|---|
+| 2026-09-26 | Dev server → UAT DB | SAFE | 15/15 pass | Two sessions. SAFE-15 first failed: the `•••` button was 32px, so it was raised to 40px and re-measured. SAFE-14 called the actions directly via `Next-Action` POSTs; all five bad calls were rejected and wrote no rows. Tip: with the browser pane hidden, pages don't hydrate until a real click (`computer` left_click), and `javascript_tool` clicks alone won't trigger it. Throwaway accounts deleted afterward. |
 | 2026-07-31 | prod | All suites at DB + HTTP level; UI suites by review only | 8 defects — see [TEST-RESULTS-2026-07-31.md](TEST-RESULTS-2026-07-31.md) | First formal run. 4 fixed (graded-price leak, orphaned-session lockout, blank `/watchlist`, missing 404 page), 4 reported. Click-driven cases unverified: the browser pane never composited, so all elements measured 0×0. |
 | 2026-08-02 | uat | All suites at DB + HTTP level, incl. new SEAL-20…36; sealed UI in a live browser | 0 failures / 106 assertions — see [TEST-RESULTS-2026-08-02.md](TEST-RESULTS-2026-08-02.md) | Sealed catalog rebuilt on TCGplayer (997 → 3,840 products). SEAL-20…36 are now automated in `audit:data`/`audit:http`. Same click-interaction caveat as above. |
 | 2026-08-04 | prod | All suites at DB + HTTP level | 1 defect found and fixed; re-run 0 failures / 108 assertions | SEAL-30 caught the grid and detail page disagreeing on price (S2 in the results). Also exposed that SEAL-30 sampled products that couldn't fail it — now samples source-skewed ones. Verify a price fix on data that actually carries the skew; same-day captures on both sources hide it. |
@@ -746,3 +772,4 @@ sweep of detail-page failures.
 | 2026-08-07 (later) | Fixed hero/overview clipping (`h-full`→`min-h-full` on the two snap sections and `DashboardOverview`'s root — DASH-52/64/65). Gated the value-chart sweep and donut ring-in to a one-time `IntersectionObserver` trigger on the overview slide instead of firing on mount (DASH-61/63). Timeline hover tooltip now tracks the hovered day and flips above/below instead of always centering (DASH-66). Timeline days are now clickable through to a new day-detail modal showing that date's Buying/Selling rows (DASH-67/68), backed by `getDayActivity`/`getDayActivityAction`. Split the dashboard's transactions table into separate Buying (`getPurchaseHistory`, reads existing `CollectionItem.costPerUnit`/`createdAt` — no new entry form) and Selling tables (PORT-27/27b/27c). |
 | 2026-09-07 | Mobile batch (see `MOBILE-BATCH-PLAN.md`): fixed the mobile viewport de-centering bug (`overflow-x: clip` guard + a `viewport` export — root cause was `AuthNav`'s six-link row overflowing 375px); replaced that row with a `UserMenuButton` avatar below `md`; moved Log out into a new `/settings` Account section; hid the dashboard hero below `md` and made `DashboardOverview` a fixed-height fitted layout there (2×2 stat grid, `auto-rows-fr` charts, `ValueBars`' `compact` prop, `AllocationDonut`'s responsive/`large` sizing); added `ChartZoom` for mobile double-tap-to-enlarge on both charts and the mobile timeline mount; slimmed the mobile Portfolio tile to one price + a "More Info" link opening a new read-only `ItemInfoModal`; built a new "In your binder" `HoldingPanel` on `/cards/[id]` and `/sealed/[id]` (`lib/portfolio.ts`'s new `getHoldingsForCard`/`getHoldingsForSealedProduct`) so Sell/Delete have a home now that the mobile tile no longer carries them; extracted the three near-duplicate modal shells (`SellOrDeleteButton`, `PositionActivityModal`, `DayActivityModal`) into one shared `DialogShell` with an X-button close and centralized Escape handling. Added DASH-69…79 and PORT-31…36. |
 | 2026-09-12 | Added CARD-19…22 for the stale-price warning on `/cards/[id]` (hand-written feature, commit `8c27d23`). `getCardDetail` now returns `priceCaptureDate`, taken from the raw `PriceSnapshot` rows rather than the densified history array — CARD-22 guards that distinction specifically. |
+| 2026-09-26 | Added Suite 21 (SAFE-01…15) for block & report on the Friends section — new `UserBlock`/`UserReport` tables (migration `20260926200000_add_user_blocks_and_reports`), `blockUser`/`unblockUser`/`reportUser` in `app/actions/friends.ts`, and `npm run reports:list`. First step toward App Store submission. |

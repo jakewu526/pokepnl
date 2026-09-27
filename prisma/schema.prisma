@@ -95,6 +95,54 @@ model User {
   tradeOffersReceived  TradeOffer[] @relation("TradeOfferRecipient")
   trades               Trade[]      @relation("TradeUser")
   tradesAsCounterparty Trade[]      @relation("TradeCounterparty")
+  blocksMade           UserBlock[]  @relation("BlockBlocker")
+  blocksReceived       UserBlock[]  @relation("BlockBlocked")
+  reportsMade          UserReport[] @relation("ReportReporter")
+  reportsReceived      UserReport[] @relation("ReportReported")
+}
+
+// One directed row per block. Blocking is one-sided -- the blocked account
+// is never told -- but it's enforced in both directions: neither side can
+// send the other a friend request, and blockUser deletes any friendship and
+// cancels pending trade offers between them. App Store guideline 1.2
+// requires a way to block abusive users in any app where accounts interact.
+model UserBlock {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("BlockBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlockBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+enum ReportReason {
+  INAPPROPRIATE_NAME
+  SCAM_OR_UNFAIR_TRADE
+  HARASSMENT_OR_SPAM
+  OTHER
+}
+
+// Append-only queue of user reports (guideline 1.2 also requires a way to
+// flag abusive users). Nothing reads these in-app yet -- `npm run
+// reports:list` prints the open ones; resolvedAt is set by hand once acted on.
+model UserReport {
+  id         String       @id @default(cuid())
+  reporterId String
+  reportedId String
+  reason     ReportReason
+  details    String?
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
+
+  reporter User @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reported User @relation("ReportReported", fields: [reportedId], references: [id], onDelete: Cascade)
+
+  @@index([resolvedAt, createdAt])
+  @@index([reportedId])
 }
 
 enum FriendshipStatus {
