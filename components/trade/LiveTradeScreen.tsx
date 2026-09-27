@@ -196,7 +196,7 @@ export function LiveTradeScreen({ offerId }: { offerId: string }) {
           type="button"
           disabled={pending}
           onClick={handleCancel}
-          className="font-body text-xs font-medium text-ink-muted hover:text-amber disabled:opacity-60"
+          className="inline-flex min-h-10 items-center px-2 font-body text-xs font-medium text-ink-muted hover:text-amber disabled:opacity-60"
         >
           Cancel trade
         </button>
@@ -238,7 +238,7 @@ function TradeSlot({
           ))}
           {confirmed && <p className="font-body text-xs font-medium text-emerald-strong">Confirmed</p>}
           {pickable && (
-            <button type="button" onClick={onPickClick} className="self-start font-body text-xs font-medium text-emerald-strong hover:underline">
+            <button type="button" onClick={onPickClick} className="-my-2 inline-flex min-h-10 items-center self-start font-body text-xs font-medium text-emerald-strong hover:underline">
               Change
             </button>
           )}

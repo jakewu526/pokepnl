@@ -610,7 +610,7 @@ export function RecentTransactions({
           {purchaseCount > purchases.length && (
             <Link
               href="/portfolio"
-              className="mt-2 inline-block font-body text-xs font-medium text-emerald-strong hover:underline"
+              className="mt-1 inline-flex min-h-10 items-center font-body text-xs font-medium text-emerald-strong hover:underline"
             >
               View all {purchaseCount} →
             </Link>
@@ -625,7 +625,7 @@ export function RecentTransactions({
           {totalCount > transactions.length && (
             <Link
               href="/transactions"
-              className="mt-2 inline-block font-body text-xs font-medium text-emerald-strong hover:underline"
+              className="mt-1 inline-flex min-h-10 items-center font-body text-xs font-medium text-emerald-strong hover:underline"
             >
               View all {totalCount} →
             </Link>

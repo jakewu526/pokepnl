@@ -737,11 +737,50 @@ Google-style account **G** (`passwordHash` null).
 | DEL-08 | G opens the dialog | no password field, only the DELETE field; deleting works the same |
 | DEL-09 | Dialog at 375px | fits on screen, no horizontal overflow, fields ≥ 44px |
 
+---
+
+# Suite 23 — Privacy, Terms & Support (LEGAL)
+
+Store-required pages. Operator facts come from `lib/legal.ts`; anything still
+`PLACEHOLDER` there renders bracketed and adds a Draft banner.
+
+| ID | Case | Expected |
+|---|---|---|
+| LEGAL-01 | `/privacy`, `/terms`, `/support` signed out and signed in | all 200, each with its own `<title>` |
+| LEGAL-02 | Any placeholder left in `lib/legal.ts` | amber "Draft" banner naming the missing keys; placeholders show as `[contact email]` etc. |
+| LEGAL-03 | All placeholders filled | no banner; real values everywhere (mailto links included) |
+| LEGAL-04 | Footer on every page (catalog, dashboard, 404, legal) | Privacy / Terms / Support links + trademark disclaimer |
+| LEGAL-05 | Settings → Help & legal | three rows link to Support, Privacy, Terms |
+| LEGAL-06 | `/signup` | "confirm you're 13 or older" line linking Terms and Privacy, below both sign-up paths |
+| LEGAL-07 | Privacy policy vs reality | every data type in `prisma/schema.prisma` keyed to a user is covered; no analytics/ads claims are still true |
+| LEGAL-08 | Support FAQ at 375px | accordions open/close, rows ≥ 48px, no overflow |
+
+---
+
+# Suite 24 — Mobile polish (MOB)
+
+App-store readiness pass at 375×812. Audit method: screenshot first (a hidden
+browser pane skips layout until it paints), then measure.
+
+| ID | Case | Expected |
+|---|---|---|
+| MOB-01 | Every page at 375px | no element extends past the viewport (outside intentional horizontal scrollers) |
+| MOB-02 | Tap targets on every page | ≥ 32px everywhere; chips/toggles/buttons ≥ 36px on mobile, text-style buttons ≥ 40px tall; desktop sizes unchanged (`sm:min-h-0`) |
+| MOB-03 | Dashboard "If you sold today" / "Made from sales" weekly delta | dollars only, no percent (a profit that crosses zero produced "-828.6%") |
+| MOB-04 | Any delta whose starting value is negative | percent sign matches the dollar sign (`deltaOverDays` divides by the magnitude) |
+| MOB-05 | Dashboard "What it's made of" with a 6-figure category | legend value fits inside the card; label truncates instead |
+| MOB-06 | Dashboard value chart y-axis | first tick label ("$151.3K") fully visible, not clipped |
+| MOB-07 | Portfolio sort chips, table header, item info modal, value-vs-cost tooltip | "Gain $", "Gain %", "Gain", "If you sold today", "What you paid" — no Unrealized / P/L / Cost basis |
+| MOB-08 | Real iPhone: tap an inline editor on `/transactions` | page does not zoom in (iOS-only `maximum-scale=1` script in `app/layout.tsx`); pinch-zoom still works |
+| MOB-09 | Android / desktop viewport meta | unchanged — no `maximum-scale` (pinch-zoom preserved) |
+| MOB-10 | Mobile tab bar labels | 10px (was 9px) |
+
 
 ## Run log
 
 | Date | Env | Suites run | Result | Notes |
 |---|---|---|---|---|
+| 2026-09-27 | Dev server → UAT DB | LEGAL, MOB | LEGAL 01,02,04–06,08 pass; MOB 01–07,09,10 pass | LEGAL-03 waits on real values in `lib/legal.ts`; LEGAL-07 by review. MOB-08 needs a physical iPhone (script verified by simulating an iOS navigator). Audit covered /, sets, set, card, sealed, sealed item, dashboard, portfolio, transactions, watchlist, settings, live trade, 404, legal pages. |
 | 2026-09-27 | Dev server → UAT DB | DEL | 9/9 pass | G simulated by logging in, then nulling `passwordHash` in the DB. Throwaway accounts deleted afterward. |
 | 2026-09-26 | Dev server → UAT DB | SAFE | 15/15 pass | Two sessions. SAFE-15 first failed: the `•••` button was 32px, so it was raised to 40px and re-measured. SAFE-14 called the actions directly via `Next-Action` POSTs; all five bad calls were rejected and wrote no rows. Tip: with the browser pane hidden, pages don't hydrate until a real click (`computer` left_click), and `javascript_tool` clicks alone won't trigger it. Throwaway accounts deleted afterward. |
 | 2026-07-31 | prod | All suites at DB + HTTP level; UI suites by review only | 8 defects — see [TEST-RESULTS-2026-07-31.md](TEST-RESULTS-2026-07-31.md) | First formal run. 4 fixed (graded-price leak, orphaned-session lockout, blank `/watchlist`, missing 404 page), 4 reported. Click-driven cases unverified: the browser pane never composited, so all elements measured 0×0. |
@@ -796,3 +835,4 @@ sweep of detail-page failures.
 | 2026-09-12 | Added CARD-19…22 for the stale-price warning on `/cards/[id]` (hand-written feature, commit `8c27d23`). `getCardDetail` now returns `priceCaptureDate`, taken from the raw `PriceSnapshot` rows rather than the densified history array — CARD-22 guards that distinction specifically. |
 | 2026-09-26 | Added Suite 21 (SAFE-01…15) for block & report on the Friends section — new `UserBlock`/`UserReport` tables (migration `20260926200000_add_user_blocks_and_reports`), `blockUser`/`unblockUser`/`reportUser` in `app/actions/friends.ts`, and `npm run reports:list`. First step toward App Store submission. |
 | 2026-09-27 | Added Suite 22 (DEL-01…09) for in-app account deletion — `deleteAccount` in `app/actions/auth.ts` (relies on existing onDelete: Cascade; relabels other users' live-trade rows as "a deleted account"), `DeleteAccountButton` in Settings → Account, and the `?deleted=1` notice on `/login`. |
+| 2026-09-27 (later) | Added Suite 23 (LEGAL-01…08) for the Privacy/Terms/Support pages, footer and signup notice, and Suite 24 (MOB-01…10) for the app-store mobile polish pass. |

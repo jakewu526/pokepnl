@@ -60,7 +60,7 @@ export function SortDropdown<T extends string>({
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 font-body text-xs font-medium text-ink-muted transition-colors hover:text-ink"
+        className="flex min-h-9 items-center gap-1.5 rounded-full border border-line px-3 py-1.5 font-body text-xs font-medium text-ink-muted transition-colors hover:text-ink sm:min-h-0"
       >
         Sort: {activeLabel}
         <svg

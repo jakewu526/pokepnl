@@ -99,6 +99,7 @@ export function DashboardOverview({
           tone={unrealizedProfit < 0 ? "negative" : "positive"}
           delta={unrealizedDelta7d}
           deltaLabel="this week"
+          showDeltaPct={false}
         />
         <StatTile
           label="Made from sales"
@@ -107,6 +108,7 @@ export function DashboardOverview({
           tone={realizedProfit < 0 ? "negative" : "positive"}
           delta={realizedDelta7d}
           deltaLabel="this week"
+          showDeltaPct={false}
         />
       </div>
 

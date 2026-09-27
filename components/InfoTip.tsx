@@ -43,7 +43,9 @@ export function InfoTip({ text }: { text: string }) {
         aria-controls={id}
         aria-label="What is this section?"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-4 w-4 items-center justify-center rounded-full border border-line text-[10px] leading-none text-ink-muted transition-colors hover:border-emerald hover:text-emerald-strong"
+        // The ⓘ stays 16px to look like a footnote mark, but the ::after pad
+        // gives it a ~40px touch area.
+        className="relative flex h-4 w-4 items-center justify-center rounded-full border border-line text-[10px] leading-none text-ink-muted transition-colors after:absolute after:-inset-3 after:content-[''] hover:border-emerald hover:text-emerald-strong"
       >
         ⓘ
       </button>

@@ -71,18 +71,20 @@ export function SellOrDeleteButton({
 
   return (
     <>
-      <div className="flex items-center gap-3">
+      {/* Text-styled, but each button gets a 40px-tall hit area -- these sit
+          in the mobile "In your binder" panel where they're the main action. */}
+      <div className="-my-2 flex items-center gap-1">
         <button
           type="button"
           onClick={openSell}
-          className="font-body text-xs font-medium text-emerald-strong hover:underline"
+          className="inline-flex min-h-10 items-center px-2 font-body text-xs font-medium text-emerald-strong hover:underline"
         >
           Sell
         </button>
         <button
           type="button"
           onClick={() => setDeleteOpen(true)}
-          className="font-body text-xs font-medium text-ink-muted hover:text-amber"
+          className="inline-flex min-h-10 items-center px-2 font-body text-xs font-medium text-ink-muted hover:text-amber"
         >
           Delete
         </button>

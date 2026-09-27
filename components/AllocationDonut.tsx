@@ -157,7 +157,7 @@ export function AllocationDonut({
             </p>
             <p
               className={`mt-0.5 font-body text-ink-muted ${
-                large ? "max-w-[110px] text-xs" : "max-w-[70px] text-[10px] sm:max-w-[110px] sm:text-xs"
+                large ? "max-w-[110px] text-xs" : "max-w-[70px] text-[11px] sm:max-w-[110px] sm:text-xs"
               }`}
             >
               {active ? active.label : "in total"}
@@ -183,8 +183,11 @@ export function AllocationDonut({
                 {percentFormatter.format(slice.pct)}
               </span>
               <span
-                className={`text-right font-data text-xs font-medium text-ink ${
-                  large ? "w-20 text-sm" : "w-16 sm:w-20 sm:text-sm"
+                // min-w, not a fixed w: a five-figure total ("$134,664.28")
+                // is wider than 4rem at 375px and used to spill past the
+                // card edge -- the label's `truncate` gives way instead.
+                className={`shrink-0 whitespace-nowrap text-right font-data text-xs font-medium text-ink ${
+                  large ? "min-w-20 text-sm" : "min-w-16 sm:min-w-20 sm:text-sm"
                 }`}
               >
                 {priceFormatter.format(slice.value)}

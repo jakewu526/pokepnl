@@ -93,7 +93,7 @@ function SquareTab({ tab, active }: { tab: TabItem; active: boolean }) {
       href={tab.href}
       aria-current={active ? "page" : undefined}
       style={maskImage ? { WebkitMaskImage: maskImage, maskImage } : undefined}
-      className={`flex h-14 w-14 shrink-0 flex-col items-center justify-center gap-0.5 bg-paper-raised px-1 text-center text-[9px] font-medium leading-tight transition-colors ${
+      className={`flex h-14 w-14 shrink-0 flex-col items-center justify-center gap-0.5 bg-paper-raised px-1 text-center text-[10px] font-medium leading-tight transition-colors ${
         active ? "text-emerald" : "text-ink-muted hover:text-ink"
       }`}
     >

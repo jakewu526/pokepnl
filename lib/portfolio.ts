@@ -176,7 +176,9 @@ export function deltaOverDays(points: PricePoint[], days: number): { abs: number
   }
   if (pastValue == null) return { abs: 0, pct: 0 };
   const abs = latest.price - pastValue;
-  return { abs, pct: pastValue !== 0 ? abs / pastValue : 0 };
+  // Divide by the magnitude: profit series can start negative, and dividing
+  // by a negative base flips the sign (+$29 from -$3.50 read as -828%).
+  return { abs, pct: pastValue !== 0 ? abs / Math.abs(pastValue) : 0 };
 }
 
 // Current per-unit market value of one holding, given the latest-price maps

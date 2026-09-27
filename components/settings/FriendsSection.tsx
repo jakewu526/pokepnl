@@ -101,7 +101,7 @@ export function FriendsSection({ data, pendingTrades }: { data: FriendsData; pen
             <button
               type="button"
               onClick={handleCopy}
-              className="rounded-full border border-line px-3 py-1.5 font-body text-xs font-medium text-ink-muted hover:text-ink"
+              className="inline-flex min-h-9 items-center rounded-full border border-line px-3 py-1.5 font-body text-xs font-medium text-ink-muted hover:text-ink"
             >
               {copied ? "Copied!" : "Copy"}
             </button>
@@ -143,7 +143,7 @@ export function FriendsSection({ data, pendingTrades }: { data: FriendsData; pen
                     type="button"
                     disabled={pending}
                     onClick={() => act(() => acceptFriendRequest(r.friendshipId))}
-                    className="font-body text-xs font-medium text-emerald-strong hover:underline disabled:opacity-60"
+                    className="inline-flex min-h-10 items-center px-1 font-body text-xs font-medium text-emerald-strong hover:underline disabled:opacity-60"
                   >
                     Accept
                   </button>
@@ -151,7 +151,7 @@ export function FriendsSection({ data, pendingTrades }: { data: FriendsData; pen
                     type="button"
                     disabled={pending}
                     onClick={() => act(() => declineFriendRequest(r.friendshipId))}
-                    className="font-body text-xs font-medium text-ink-muted hover:text-amber disabled:opacity-60"
+                    className="inline-flex min-h-10 items-center px-1 font-body text-xs font-medium text-ink-muted hover:text-amber disabled:opacity-60"
                   >
                     Decline
                   </button>
@@ -174,7 +174,7 @@ export function FriendsSection({ data, pendingTrades }: { data: FriendsData; pen
                   type="button"
                   disabled={pending}
                   onClick={() => act(() => cancelFriendRequest(r.friendshipId))}
-                  className="font-body text-xs font-medium text-ink-muted hover:text-amber disabled:opacity-60"
+                  className="inline-flex min-h-10 items-center px-1 font-body text-xs font-medium text-ink-muted hover:text-amber disabled:opacity-60"
                 >
                   Cancel
                 </button>
@@ -197,7 +197,7 @@ export function FriendsSection({ data, pendingTrades }: { data: FriendsData; pen
                 <span className="font-body text-sm text-ink">
                   {t.role === "proposer" ? `Waiting on ${t.counterpartyName}` : `${t.counterpartyName} wants to trade`}
                 </span>
-                <span className="font-body text-xs font-medium text-emerald-strong">Open →</span>
+                <span className="inline-flex min-h-10 items-center px-1 font-body text-xs font-medium text-emerald-strong">Open →</span>
               </Link>
             ))}
           </div>
@@ -223,7 +223,7 @@ export function FriendsSection({ data, pendingTrades }: { data: FriendsData; pen
                     type="button"
                     disabled={pending}
                     onClick={() => act(() => removeFriend(f.friendshipId))}
-                    className="font-body text-xs font-medium text-ink-muted hover:text-amber disabled:opacity-60"
+                    className="inline-flex min-h-10 items-center px-1 font-body text-xs font-medium text-ink-muted hover:text-amber disabled:opacity-60"
                   >
                     Remove
                   </button>
@@ -247,7 +247,7 @@ export function FriendsSection({ data, pendingTrades }: { data: FriendsData; pen
                   type="button"
                   disabled={pending}
                   onClick={() => act(() => unblockUser(b.userId))}
-                  className="font-body text-xs font-medium text-ink-muted hover:text-ink disabled:opacity-60"
+                  className="inline-flex min-h-10 items-center px-1 font-body text-xs font-medium text-ink-muted hover:text-ink disabled:opacity-60"
                 >
                   Unblock
                 </button>

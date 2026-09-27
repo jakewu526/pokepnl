@@ -53,6 +53,18 @@ export default async function RootLayout({
       className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable} h-full`}
     >
       <body className="min-h-full flex flex-col pb-[calc(6rem+env(safe-area-inset-bottom))] font-body antialiased md:pb-0">
+        {/* iOS (Safari and the WKWebView a Capacitor build runs in) zooms the
+            page when a text field under 16px gets focus, and never zooms back
+            out -- the inline editors on /transactions use 10-14px text.
+            maximum-scale=1 stops that, and iOS still allows pinch-zoom with it
+            set. It's added only on iOS because Android does honor it and
+            would lose pinch-zoom. Runs inline, before hydration, so the
+            viewport is fixed before the first tap. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var d=navigator;if(/iP(hone|ad|od)/.test(d.userAgent)||(d.platform==="MacIntel"&&d.maxTouchPoints>1)){var m=document.querySelector('meta[name="viewport"]');if(m&&m.content.indexOf("maximum-scale")<0)m.content+=", maximum-scale=1";}})();`,
+          }}
+        />
         {children}
         <SiteFooter />
         <AppChrome isAuthed={!!user} hasNotification={hasNotification} />

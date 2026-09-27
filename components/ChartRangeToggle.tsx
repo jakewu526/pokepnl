@@ -18,7 +18,7 @@ export function ChartRangeToggle({
           key={o.key}
           type="button"
           onClick={() => onSelect(o.key)}
-          className={`rounded px-2.5 py-1 font-body text-xs font-medium transition ${
+          className={`inline-flex min-h-9 items-center rounded px-2.5 py-1 font-body text-xs font-medium transition sm:min-h-0 ${
             o.key === selected
               ? "bg-ink text-paper"
               : "border border-line text-ink-muted hover:bg-paper hover:text-ink"

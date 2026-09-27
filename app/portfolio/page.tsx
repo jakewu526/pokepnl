@@ -159,8 +159,8 @@ export default async function PortfolioPage({
   const SORT_OPTIONS: { key: SortKey; label: string }[] = [
     { key: "recent", label: "Recently added" },
     { key: "value", label: "Value" },
-    { key: "unrealized-abs", label: "Unrealized $" },
-    { key: "unrealized-pct", label: "Unrealized %" },
+    { key: "unrealized-abs", label: "Gain $" },
+    { key: "unrealized-pct", label: "Gain %" },
   ];
   const TYPE_OPTIONS: { key: TypeFilter; label: string }[] = [
     { key: "all", label: "All" },
@@ -238,7 +238,7 @@ export default async function PortfolioPage({
                 <Link
                   key={opt.key}
                   href={sortHref(opt.key)}
-                  className={`rounded-full border px-3 py-1.5 font-body text-xs font-medium transition ${
+                  className={`inline-flex min-h-9 items-center rounded-full border px-3 py-1.5 font-body text-xs font-medium transition sm:min-h-0 ${
                     sort === opt.key
                       ? "border-emerald bg-emerald text-paper-raised"
                       : "border-line text-ink-muted hover:text-ink"
@@ -254,7 +254,7 @@ export default async function PortfolioPage({
                     key={mode}
                     href={viewHref(mode)}
                     aria-pressed={view === mode}
-                    className={`rounded-full px-3 py-1.5 font-body text-xs font-medium capitalize transition ${
+                    className={`inline-flex min-h-9 items-center rounded-full px-3 py-1.5 font-body text-xs font-medium capitalize transition sm:min-h-0 ${
                       view === mode ? "bg-emerald text-paper-raised" : "text-ink-muted hover:text-ink"
                     }`}
                   >
@@ -284,7 +284,7 @@ export default async function PortfolioPage({
                   <th className="px-3 py-2 font-medium">Cost/unit</th>
                   <th className="px-3 py-2 font-medium">Market</th>
                   <th className="px-3 py-2 font-medium">Value</th>
-                  <th className="px-3 py-2 font-medium">P/L</th>
+                  <th className="px-3 py-2 font-medium">Gain</th>
                   <th className="px-3 py-2 font-medium">Actions</th>
                 </tr>
               </thead>

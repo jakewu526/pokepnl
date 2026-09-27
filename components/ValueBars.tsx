@@ -85,7 +85,9 @@ export function ValueBars({
   const [range, setRange] = useState<RangeKey | null>(null);
 
   const HEIGHT = compact ? 220 : 640;
-  const PAD_LEFT = compact ? 34 : 56;
+  // 46, not 34: the compact card's "$1.3K"-style tick labels are right-
+  // aligned at PAD_LEFT - 8 and got clipped at the left edge at 34.
+  const PAD_LEFT = compact ? 46 : 56;
 
   const costByDate = useMemo(
     () => new Map(costBasisPoints.map((p) => [p.date, p.price])),

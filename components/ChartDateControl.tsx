@@ -99,7 +99,7 @@ function DateField({
   }
 
   return (
-    <span className="relative inline-flex items-center gap-1 rounded border border-line bg-paper py-1 pl-2 pr-6">
+    <span className="relative inline-flex min-h-9 items-center gap-1 rounded border border-line bg-paper py-1 pl-2 pr-6 sm:min-h-0">
       <input
         ref={monthRef}
         type="text"
@@ -209,7 +209,7 @@ export function ChartDateControl({
           type="button"
           onClick={() => selectMode("range")}
           aria-pressed={mode === "range"}
-          className={`rounded px-2 py-0.5 font-body text-xs font-medium transition ${
+          className={`inline-flex min-h-8 items-center rounded px-2.5 py-0.5 font-body text-xs font-medium transition sm:min-h-0 sm:px-2 ${
             mode === "range" ? "bg-ink text-paper" : "text-ink-muted hover:text-ink"
           }`}
         >
@@ -219,7 +219,7 @@ export function ChartDateControl({
           type="button"
           onClick={() => selectMode("day")}
           aria-pressed={mode === "day"}
-          className={`rounded px-2 py-0.5 font-body text-xs font-medium transition ${
+          className={`inline-flex min-h-8 items-center rounded px-2.5 py-0.5 font-body text-xs font-medium transition sm:min-h-0 sm:px-2 ${
             mode === "day" ? "bg-ink text-paper" : "text-ink-muted hover:text-ink"
           }`}
         >
@@ -248,7 +248,7 @@ export function ChartDateControl({
           />
           <button
             type="submit"
-            className={`rounded px-2.5 py-1 font-body text-xs font-medium transition ${
+            className={`inline-flex min-h-9 items-center rounded px-2.5 py-1 font-body text-xs font-medium transition sm:min-h-0 ${
               isRangeActive
                 ? "bg-ink text-paper"
                 : "border border-line text-ink-muted hover:bg-paper hover:text-ink"
@@ -271,7 +271,7 @@ export function ChartDateControl({
           />
           <button
             type="submit"
-            className={`rounded px-2.5 py-1 font-body text-xs font-medium transition ${
+            className={`inline-flex min-h-9 items-center rounded px-2.5 py-1 font-body text-xs font-medium transition sm:min-h-0 ${
               isDayActive
                 ? "bg-ink text-paper"
                 : "border border-line text-ink-muted hover:bg-paper hover:text-ink"

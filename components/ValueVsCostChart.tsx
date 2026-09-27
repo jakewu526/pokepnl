@@ -285,7 +285,7 @@ export function ValueVsCostChart({
                 swatch: { color: CHART.role.value },
               },
               {
-                label: "Cost basis",
+                label: "What you paid",
                 value: priceFormatter.format(costByDate.get(valueCoords[hoverIndex].point.date) ?? 0),
                 swatch: { color: CHART.role.cost, filled: false },
               },

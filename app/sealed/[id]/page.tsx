@@ -37,7 +37,7 @@ export default async function SealedProductDetailPage({
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-5 sm:px-6">
           <BackLink
             fallbackHref="/sealed"
-            className="font-display text-base font-medium text-emerald-strong hover:underline"
+            className="-my-2 -ml-2 inline-flex min-h-10 items-center px-2 font-display text-base font-medium text-emerald-strong hover:underline"
           >
             ← Sealed
           </BackLink>

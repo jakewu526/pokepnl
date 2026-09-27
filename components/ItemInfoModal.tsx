@@ -55,7 +55,7 @@ export function ItemInfoModal({
     { label: "Market price", value: marketPrice != null ? priceFormatter.format(marketPrice) : "—" },
     { label: "Total value", value: marketValue != null ? priceFormatter.format(marketValue) : "—" },
     {
-      label: "Unrealized",
+      label: "If you sold today",
       value:
         unrealized != null
           ? `${signedPrice(unrealized)}${unrealizedPct != null ? ` (${signedPercent(unrealizedPct)})` : ""}`

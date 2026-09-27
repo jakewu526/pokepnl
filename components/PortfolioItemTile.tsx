@@ -157,7 +157,8 @@ export function PortfolioItemTile(
               <button
                 type="button"
                 onClick={() => setInfoOpen(true)}
-                className="mt-1 font-body text-[13px] font-medium text-emerald-strong"
+                // -ml/-mb + padding: same visual spot, but a ~40px tap area.
+                className="-mb-2 -ml-2 mt-0 inline-flex min-h-10 items-center px-2 font-body text-[13px] font-medium text-emerald-strong"
               >
                 More Info
               </button>

@@ -33,6 +33,7 @@ export function StatTile({
   sublabel,
   delta,
   deltaLabel = "vs 30d",
+  showDeltaPct = true,
   tone = "neutral",
 }: {
   label: string;
@@ -41,6 +42,9 @@ export function StatTile({
   sublabel?: string;
   delta?: { abs: number; pct: number } | null;
   deltaLabel?: string;
+  /** Off for profit tiles: a profit can cross zero, and a percent change of
+      a number that started negative or near zero reads as nonsense. */
+  showDeltaPct?: boolean;
   tone?: "positive" | "negative" | "neutral";
 }) {
   const valueClass =
@@ -57,11 +61,12 @@ export function StatTile({
       </p>
       {delta && delta.abs !== 0 && (
         <p
-          className={`mt-1 font-data text-[10px] font-medium sm:text-xs ${
+          className={`mt-1 font-data text-[11px] font-medium sm:text-xs ${
             delta.abs < 0 ? "text-amber" : "text-emerald-strong"
           }`}
         >
-          {delta.abs < 0 ? "▼" : "▲"} {signedCurrency(delta.abs)} · {signedPercent(delta.pct)}{" "}
+          {delta.abs < 0 ? "▼" : "▲"} {signedCurrency(delta.abs)}
+          {showDeltaPct && <> · {signedPercent(delta.pct)}</>}{" "}
           <span className="hidden sm:inline">{deltaLabel}</span>
         </p>
       )}

@@ -49,7 +49,9 @@ export function EbayConnectionCard({
 
   return (
     <div className="flex flex-col gap-3 rounded-card border border-line bg-paper-raised p-5">
-      <div className="flex items-center justify-between gap-3">
+      {/* Stacks below sm so "Connect eBay account" stays on one line
+          instead of wrapping into a three-line pill beside the blurb. */}
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="font-display text-base font-semibold tracking-tight text-ink">eBay</h3>
           <p className="font-body text-sm text-ink-muted">
@@ -59,7 +61,7 @@ export function EbayConnectionCard({
         {!ebayUserId && (
           <a
             href="/api/auth/ebay"
-            className="rounded-full bg-emerald px-3 py-1.5 font-body text-sm font-medium text-paper-raised hover:opacity-90"
+            className="inline-flex min-h-10 shrink-0 items-center whitespace-nowrap rounded-full bg-emerald px-4 py-1.5 font-body text-sm font-medium text-paper-raised hover:opacity-90"
           >
             Connect eBay account
           </a>
@@ -83,7 +85,7 @@ export function EbayConnectionCard({
               type="button"
               disabled={pending}
               onClick={() => startTransition(() => disconnectEbay())}
-              className="font-body text-xs font-medium text-ink-muted hover:text-amber disabled:opacity-60"
+              className="inline-flex min-h-10 items-center px-1 font-body text-xs font-medium text-ink-muted hover:text-amber disabled:opacity-60"
             >
               Disconnect
             </button>
