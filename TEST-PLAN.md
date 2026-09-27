@@ -716,11 +716,33 @@ pending request to A. Run in two browsers (or one normal + one private window).
 | SAFE-14 | Call `blockUser`/`reportUser` with your own id or a nonexistent id | error returned, no row written |
 | SAFE-15 | Menu, both dialogs and the Blocked list at 375px | no overflow; tap targets ≥ 40px |
 
+---
+
+# Suite 22 — Account deletion (DEL)
+
+Settings → Account → **Delete account** (App Store guideline 5.1.1(v)). Seed a
+password account **X** with a collection item, watchlist item, friend **Y**, a
+block, a report and a live trade whose mirror row sits in Y's history; plus a
+Google-style account **G** (`passwordHash` null).
+
+| ID | Case | Expected |
+|---|---|---|
+| DEL-01 | X opens the dialog | lists what gets deleted; password field + "Type DELETE" field; Delete forever disabled |
+| DEL-02 | Type `delete` (lowercase) | button stays disabled |
+| DEL-03 | Wrong password + `DELETE` | "That password isn't right."; nothing deleted; password field clears |
+| DEL-04 | Correct password + `DELETE` | lands on `/login?deleted=1` showing "Your account and all its data have been deleted." |
+| DEL-05 | DB after DEL-04 | zero rows for X in User, CollectionItem, WatchlistItem, Friendship, UserBlock, UserReport, Trade; Y still exists |
+| DEL-06 | Y's trade history after DEL-04 | row kept, `counterpartyUserId` null, label reads "a deleted account" (not blank) |
+| DEL-07 | Visit `/dashboard` after DEL-04 | redirected to `/login` — the session is gone |
+| DEL-08 | G opens the dialog | no password field, only the DELETE field; deleting works the same |
+| DEL-09 | Dialog at 375px | fits on screen, no horizontal overflow, fields ≥ 44px |
+
 
 ## Run log
 
 | Date | Env | Suites run | Result | Notes |
 |---|---|---|---|---|
+| 2026-09-27 | Dev server → UAT DB | DEL | 9/9 pass | G simulated by logging in, then nulling `passwordHash` in the DB. Throwaway accounts deleted afterward. |
 | 2026-09-26 | Dev server → UAT DB | SAFE | 15/15 pass | Two sessions. SAFE-15 first failed: the `•••` button was 32px, so it was raised to 40px and re-measured. SAFE-14 called the actions directly via `Next-Action` POSTs; all five bad calls were rejected and wrote no rows. Tip: with the browser pane hidden, pages don't hydrate until a real click (`computer` left_click), and `javascript_tool` clicks alone won't trigger it. Throwaway accounts deleted afterward. |
 | 2026-07-31 | prod | All suites at DB + HTTP level; UI suites by review only | 8 defects — see [TEST-RESULTS-2026-07-31.md](TEST-RESULTS-2026-07-31.md) | First formal run. 4 fixed (graded-price leak, orphaned-session lockout, blank `/watchlist`, missing 404 page), 4 reported. Click-driven cases unverified: the browser pane never composited, so all elements measured 0×0. |
 | 2026-08-02 | uat | All suites at DB + HTTP level, incl. new SEAL-20…36; sealed UI in a live browser | 0 failures / 106 assertions — see [TEST-RESULTS-2026-08-02.md](TEST-RESULTS-2026-08-02.md) | Sealed catalog rebuilt on TCGplayer (997 → 3,840 products). SEAL-20…36 are now automated in `audit:data`/`audit:http`. Same click-interaction caveat as above. |
@@ -773,3 +795,4 @@ sweep of detail-page failures.
 | 2026-09-07 | Mobile batch (see `MOBILE-BATCH-PLAN.md`): fixed the mobile viewport de-centering bug (`overflow-x: clip` guard + a `viewport` export — root cause was `AuthNav`'s six-link row overflowing 375px); replaced that row with a `UserMenuButton` avatar below `md`; moved Log out into a new `/settings` Account section; hid the dashboard hero below `md` and made `DashboardOverview` a fixed-height fitted layout there (2×2 stat grid, `auto-rows-fr` charts, `ValueBars`' `compact` prop, `AllocationDonut`'s responsive/`large` sizing); added `ChartZoom` for mobile double-tap-to-enlarge on both charts and the mobile timeline mount; slimmed the mobile Portfolio tile to one price + a "More Info" link opening a new read-only `ItemInfoModal`; built a new "In your binder" `HoldingPanel` on `/cards/[id]` and `/sealed/[id]` (`lib/portfolio.ts`'s new `getHoldingsForCard`/`getHoldingsForSealedProduct`) so Sell/Delete have a home now that the mobile tile no longer carries them; extracted the three near-duplicate modal shells (`SellOrDeleteButton`, `PositionActivityModal`, `DayActivityModal`) into one shared `DialogShell` with an X-button close and centralized Escape handling. Added DASH-69…79 and PORT-31…36. |
 | 2026-09-12 | Added CARD-19…22 for the stale-price warning on `/cards/[id]` (hand-written feature, commit `8c27d23`). `getCardDetail` now returns `priceCaptureDate`, taken from the raw `PriceSnapshot` rows rather than the densified history array — CARD-22 guards that distinction specifically. |
 | 2026-09-26 | Added Suite 21 (SAFE-01…15) for block & report on the Friends section — new `UserBlock`/`UserReport` tables (migration `20260926200000_add_user_blocks_and_reports`), `blockUser`/`unblockUser`/`reportUser` in `app/actions/friends.ts`, and `npm run reports:list`. First step toward App Store submission. |
+| 2026-09-27 | Added Suite 22 (DEL-01…09) for in-app account deletion — `deleteAccount` in `app/actions/auth.ts` (relies on existing onDelete: Cascade; relabels other users' live-trade rows as "a deleted account"), `DeleteAccountButton` in Settings → Account, and the `?deleted=1` notice on `/login`. |

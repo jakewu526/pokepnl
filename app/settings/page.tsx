@@ -7,16 +7,18 @@ import { logout } from "@/app/actions/auth";
 import { getFriendsData } from "@/app/actions/friends";
 import { getPendingTradeOffers } from "@/app/actions/trades";
 import { BrandLink } from "@/components/BrandLink";
+import { DeleteAccountButton } from "@/components/settings/DeleteAccountButton";
 
 export default async function SettingsPage() {
   const session = await verifySession();
-  const [ebayAccount, user, friendsData, pendingTrades] = await Promise.all([
+  const [ebayAccount, user, friendsData, pendingTrades, auth] = await Promise.all([
     prisma.ebayAccount.findUnique({ where: { userId: session.userId } }),
     // verifySession() already guarantees this account has a name/email --
     // getCurrentUser() is cached, so this doesn't add a second query.
     getCurrentUser(),
     getFriendsData(session.userId),
     getPendingTradeOffers(),
+    prisma.user.findUnique({ where: { id: session.userId }, select: { passwordHash: true } }),
   ]);
 
   return (
@@ -58,14 +60,17 @@ export default async function SettingsPage() {
           <div className="rounded-card border border-line bg-paper-raised p-4">
             <p className="font-body text-sm text-ink">{user?.name}</p>
             <p className="font-body text-xs text-ink-muted">{user?.email}</p>
-            <form action={logout} className="mt-4">
-              <button
-                type="submit"
-                className="w-full rounded-card border border-line px-4 py-3 font-body text-sm font-medium text-ink-muted transition-colors hover:text-ink sm:w-auto"
-              >
-                Log out
-              </button>
-            </form>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <form action={logout}>
+                <button
+                  type="submit"
+                  className="w-full rounded-card border border-line px-4 py-3 font-body text-sm font-medium text-ink-muted transition-colors hover:text-ink sm:w-auto"
+                >
+                  Log out
+                </button>
+              </form>
+              <DeleteAccountButton hasPassword={!!auth?.passwordHash} />
+            </div>
           </div>
         </section>
       </main>

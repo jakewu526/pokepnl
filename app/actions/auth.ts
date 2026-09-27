@@ -89,6 +89,45 @@ export async function logout(): Promise<void> {
   redirect("/login");
 }
 
+export type DeleteAccountState = { message?: string } | undefined;
+
+// App Store guideline 5.1.1(v): an app with sign-up must let people delete
+// their account from inside the app. Every table keyed to a user already
+// has onDelete: Cascade (collection, lots, transactions, watchlist, trades,
+// friends, blocks, reports, eBay link), so deleting the User row is the
+// whole wipe. Password accounts re-enter their password; Google accounts
+// have none, so typing DELETE is the only confirmation there.
+export async function deleteAccount(_state: DeleteAccountState, formData: FormData): Promise<DeleteAccountState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  if (String(formData.get("confirm") ?? "").trim() !== "DELETE") {
+    return { message: "Type DELETE to confirm." };
+  }
+
+  const account = await prisma.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
+  if (account?.passwordHash) {
+    const password = String(formData.get("password") ?? "");
+    if (!password || !(await verifyPassword(password, account.passwordHash))) {
+      return { message: "That password isn't right." };
+    }
+  }
+
+  await prisma.$transaction([
+    // Other people's trade history keeps its rows (counterpartyUserId is
+    // SetNull), but a live trade has no counterpartyNote to fall back on --
+    // without this label the row would show a blank name.
+    prisma.trade.updateMany({
+      where: { counterpartyUserId: user.id, counterpartyNote: null },
+      data: { counterpartyNote: "a deleted account" },
+    }),
+    prisma.user.delete({ where: { id: user.id } }),
+  ]);
+
+  await deleteSession();
+  redirect("/login?deleted=1");
+}
+
 // The one-time completion step for accounts that reached /welcome with no
 // name -- a Google sign-in whose claim omitted one, or (before name became
 // required above) a legacy email account. Reads the signed-in user off the

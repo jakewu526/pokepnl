@@ -11,7 +11,7 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; deleted?: string }>;
 }) {
   const params = await searchParams;
   const oauthError = params.error ? OAUTH_ERROR_MESSAGES[params.error] : undefined;
@@ -30,6 +30,9 @@ export default async function LoginPage({
           Log in
         </h1>
       </div>
+      {params.deleted && (
+        <p className="mb-4 font-body text-sm text-ink-muted">Your account and all its data have been deleted.</p>
+      )}
       {oauthError && <p className="mb-4 font-body text-sm text-amber">{oauthError}</p>}
       <LoginForm />
       <div className="my-4 flex items-center gap-3">
